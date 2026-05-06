@@ -1,0 +1,58 @@
+# =============================================================================
+# Zsh Environment - sourced for all shell types (login/non-login, interactive/non-interactive)
+# =============================================================================
+
+# Ensure that a non-login, non-interactive shell has a defined environment.
+if [[ ( "$SHLVL" -eq 1 && ! -o LOGIN ) && -s "${ZDOTDIR:-$HOME}/.zprofile" ]]; then
+  source "${ZDOTDIR:-$HOME}/.zprofile"
+fi
+
+# Load environment profile if it exists
+[[ -f ~/.dotfiles_profile ]] && source ~/.dotfiles_profile
+
+# Cargo/Rust - sourced for all shell types
+[ -s "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
+
+# =============================================================================
+# PATH additions for all shell types
+# =============================================================================
+
+# Go
+export GOPATH=$HOME/Dev
+if command -v brew >/dev/null 2>&1; then
+    export GOROOT="$(brew --prefix golang)/libexec"
+fi
+export GOPROXY=https://proxy.golang.org,direct
+export GOSUMDB="sum.golang.org"
+export PATH=$PATH:$GOPATH/bin:${GOROOT:+$GOROOT/bin}
+
+# Tools
+export PATH=$PATH:$HOME/Tools/bin
+export PATH=$PATH:$HOME/Tools/STM32Toolchain/gcc-arm/bin
+export PATH=$PATH:/usr/local/opt/mysql@5.7/bin
+export PATH=$PATH:$HOME/bin/gs-venv/bin
+export PATH=$PATH:$HOME/.local/bin/lvim
+
+# pipx
+export PATH="$PATH:$HOME/.local/bin"
+
+# Dart/Flutter
+export PATH="$PATH":"$HOME/.pub-cache/bin"
+
+# Android
+export ANDROID_HOME=$HOME/Library/Android/sdk/
+export PATH=$PATH:$ANDROID_HOME/platform-tools
+export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+export PATH=$PATH:$ANDROID_HOME/emulator
+
+# Rancher
+export PATH=$PATH:$HOME/.rd/bin
+
+# NVM (lazy loaded in .zshrc, but NVM_DIR must be set here)
+export NVM_DIR="$HOME/.nvm"
+
+# zsh functions path
+export FPATH="/usr/local/share/zsh/site-functions:$FPATH"
+
+# Homebrew
+export HOMEBREW_NO_GITHUB_API=1
