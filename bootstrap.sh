@@ -192,17 +192,86 @@ install_deps_linux() {
     log "Installing Linux dependencies via apt..."
     if command -v apt-get >/dev/null 2>&1; then
         sudo apt-get update
-        sudo apt-get install -y zsh tmux git fzf curl wget fuse sops age
+        # Install base dependencies
+        local pkgs=(zsh tmux git fzf curl wget age)
+        for pkg in "${pkgs[@]}"; do
+            sudo apt-get install -y "$pkg" || warn "Package $pkg not found or failed to install via apt."
+        done
     else
-        warn "apt-get not found. Please ensure zsh, tmux, git, fzf, curl, wget, sops, age are installed."
+        warn "apt-get not found. Skipping apt installation."
     fi
 
-    # Install Neovim Nightly AppImage for latest features
-    log "Installing Neovim Nightly AppImage..."
+    # Ensure local bin exists and is in PATH for the rest of the script
     mkdir -p "$HOME/.local/bin"
-    curl -LO https://github.com/neovim/neovim/releases/download/nightly/nvim-linux-x86_64.appimage
-    chmod u+x nvim-linux-x86_64.appimage
-    mv nvim-linux-x86_64.appimage "$HOME/.local/bin/nvim"
+    export PATH="$HOME/.local/bin:$PATH"
+
+    # Install sops if missing
+    if ! command -v sops >/dev/null 2>&1; then
+        log "sops not found. Installing from GitHub..."
+        local ARCH=$(uname -m)
+        local SOPS_ARCH="linux.amd64"
+        [[ "$ARCH" == "aarch64" ]] && SOPS_ARCH="linux.arm64"
+        
+        local SOPS_VERSION=$(curl -s https://api.github.com/repos/getsops/sops/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        if [[ -n "$SOPS_VERSION" ]]; then
+            log "Downloading sops $SOPS_VERSION for $SOPS_ARCH..."
+            curl -L -o "$HOME/.local/bin/sops" "https://github.com/getsops/sops/releases/download/${SOPS_VERSION}/sops-${SOPS_VERSION}.${SOPS_ARCH}"
+            chmod +x "$HOME/.local/bin/sops"
+        else
+            warn "Could not determine latest sops version. Please install sops manually."
+        fi
+    fi
+
+    # Install age if missing and not installed via apt
+    if ! command -v age >/dev/null 2>&1; then
+        log "age not found. Installing from GitHub..."
+        local ARCH=$(uname -m)
+        local AGE_ARCH="linux-amd64"
+        [[ "$ARCH" == "aarch64" ]] && AGE_ARCH="linux-arm64"
+        
+        local AGE_VERSION=$(curl -s https://api.github.com/repos/FiloSottile/age/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        if [[ -n "$AGE_VERSION" ]]; then
+            log "Downloading age $AGE_VERSION..."
+            local TEMP_DIR=$(mktemp -d)
+            curl -L -o "$TEMP_DIR/age.tar.gz" "https://github.com/FiloSottile/age/releases/download/${AGE_VERSION}/age-${AGE_VERSION}-${AGE_ARCH}.tar.gz"
+            tar -xzf "$TEMP_DIR/age.tar.gz" -C "$TEMP_DIR"
+            find "$TEMP_DIR" -type f -name "age" -exec mv {} "$HOME/.local/bin/age" \;
+            find "$TEMP_DIR" -type f -name "age-keygen" -exec mv {} "$HOME/.local/bin/age-keygen" \;
+            rm -rf "$TEMP_DIR"
+            chmod +x "$HOME/.local/bin/age" "$HOME/.local/bin/age-keygen"
+        fi
+    fi
+
+    # Install Neovim Nightly
+    if ! command -v nvim >/dev/null 2>&1; then
+        log "Installing Neovim Nightly..."
+        local ARCH=$(uname -m)
+        if [[ "$ARCH" == "x86_64" ]]; then
+            local NVIM_BIN="$HOME/.local/bin/nvim"
+            curl -L -o "$NVIM_BIN" https://github.com/neovim/neovim/releases/download/nightly/nvim-linux-x86_64.appimage
+            chmod u+x "$NVIM_BIN"
+            
+            # Check if FUSE is available
+            if ! command -v fusermount >/dev/null 2>&1 && ! command -v fusermount3 >/dev/null 2>&1; then
+                warn "FUSE not detected. Neovim AppImage may not run directly."
+                log "Attempting AppImage extraction as fallback..."
+                local OLD_PWD=$(pwd)
+                cd "$HOME/.local/bin"
+                ./nvim --appimage-extract >/dev/null
+                mv squashfs-root nvim-extracted
+                # Create a wrapper script to run the extracted binary
+                cat > nvim <<EOF
+#!/bin/bash
+\$HOME/.local/bin/nvim-extracted/AppRun "\$@"
+EOF
+                chmod +x nvim
+                cd "$OLD_PWD"
+                success "Neovim installed via extraction (no FUSE required)."
+            fi
+        else
+            warn "Neovim AppImage only supported on x86_64. Skipping."
+        fi
+    fi
 }
 
 if [[ "$PROFILE" == "mac-full" ]]; then
