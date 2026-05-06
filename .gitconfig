@@ -1,0 +1,24 @@
+[user]
+  name = Agustin Ottobre
+	email = agustin.ottobre@gmail.com
+[diff]
+  tool = vimdiff
+[difftool]
+  prompt = false
+  trustExitCode = true
+[alias]
+  d = difftool
+  m = mergetool
+[merge]
+  tool = vimdiff
+[mergetool]
+  prompt = false
+  trustExitCode = true
+  keepBackup = false
+[core]
+  excludesfile = ~/.gitignore
+[filter "lfs"]
+	required = true
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
