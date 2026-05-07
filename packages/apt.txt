@@ -1,0 +1,16 @@
+# System Build & CLI tools
+build-essential
+git
+curl
+wget
+zsh
+tmux
+xsel
+
+# Neovim Dependencies
+age
+nodejs
+
+# Other tools
+fzf
+sops

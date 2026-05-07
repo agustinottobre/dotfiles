@@ -1,0 +1,12 @@
+# Core
+fzf
+neovim
+zsh
+git
+go
+sops
+age
+tree-sitter
+
+# Other
+tmux

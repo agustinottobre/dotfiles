@@ -1,0 +1,102 @@
+#!/bin/bash
+
+set -e
+set -o pipefail
+
+# Helper to check if a command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# --- Package Installation Functions ---
+
+install_apt_packages() {
+    echo "Updating apt repositories..."
+    sudo apt-get update
+    echo "Installing packages from apt.txt..."
+    packages=$(cat "{{ .chezmoi.sourceDir }}/packages/apt.txt" | grep -vE "^\s*#|^\s*$" | tr '
+' ' ')
+    sudo apt-get install -y $packages
+}
+
+install_brew_packages() {
+    if ! command_exists brew; then
+        echo "Homebrew not found. Please install it first from https://brew.sh/"
+        exit 1
+    fi
+    echo "Updating Homebrew..."
+    brew update
+    echo "Installing packages from brew.txt..."
+    packages=$(cat "{{ .chezmoi.sourceDir }}/packages/brew.txt" | grep -vE "^\s*#|^\s*$" | tr '
+' ' ')
+    brew install $packages
+}
+
+install_npm_packages() {
+    if ! command_exists npm; then
+        echo "npm not found. Please install Node.js first."
+        return
+    fi
+    echo "Installing global npm packages..."
+    packages=$(cat "{{ .chezmoi.sourceDir }}/packages/npm.txt" | grep -vE "^\s*#|^\s*$" | tr '
+' ' ')
+    sudo npm install -g $packages
+}
+
+# --- OS Specific Setup ---
+
+setup_debian() {
+    echo "Running Debian/Ubuntu setup..."
+    install_apt_packages
+
+    # Special case: Install Tree-sitter CLI v0.25.2 for GLIBC compatibility
+    echo "Installing/Updating tree-sitter CLI v0.25.2..."
+    local ts_path="{{ .chezmoi.homeDir }}/.local/bin/tree-sitter"
+    if [ ! -f "$ts_path" ] || [[ ! "$($ts_path --version 2>/dev/null)" == *"0.25.2"* ]]; then
+        mkdir -p "{{ .chezmoi.homeDir }}/.local/bin"
+        curl -L -o "/tmp/tree-sitter.gz" "https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.2/tree-sitter-linux-x64.gz"
+        gunzip -f "/tmp/tree-sitter.gz"
+        mv "/tmp/tree-sitter" "$ts_path"
+        chmod +x "$ts_path"
+        echo "tree-sitter CLI v0.25.2 installed to $ts_path"
+    else
+        echo "tree-sitter CLI v0.25.2 is already installed."
+    fi
+
+    # Install Neovim Nightly AppImage
+    if ! command_exists nvim; then
+        echo "Installing Neovim Nightly AppImage..."
+        mkdir -p "{{ .chezmoi.homeDir }}/.local/bin"
+        curl -L -o "{{ .chezmoi.homeDir }}/.local/bin/nvim" https://github.com/neovim/neovim/releases/download/nightly/nvim-linux-x86_64.appimage
+        chmod u+x "{{ .chezmoi.homeDir }}/.local/bin/nvim"
+    fi
+
+    install_npm_packages
+}
+
+setup_macos() {
+    echo "Running macOS setup..."
+    install_brew_packages
+    install_npm_packages
+}
+
+# --- Main Execution ---
+
+echo "Starting package installation..."
+
+{{ if eq .chezmoi.os "linux" -}}
+setup_debian
+{{ else if eq .chezmoi.os "darwin" -}}
+setup_macos
+{{ else -}}
+echo "Unsupported OS: {{ .chezmoi.os }}"
+exit 1
+{{ end -}}
+
+# Final post-install actions
+if command_exists tmux; then
+    echo "Installing tmux plugins..."
+    "{{ .chezmoi.homeDir }}/.tmux/plugins/tpm/bin/install_plugins"
+fi
+
+echo "Package installation and setup complete!"
