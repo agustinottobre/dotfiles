@@ -347,7 +347,14 @@ function kube_ps1_autohide() {
 
 ## Get all kube config separate files from $HOME/.kube/config* and $HOME/.config/k3d/kubeconfig* to switch context and namespace with kubectx and kubens
   function kubeconfigRefresh() {
-    export KUBECONFIG=$(find "$HOME/.kube" "$HOME/.config/k3d" -name "config*" -o -name "kubeconfig*" | awk '{printf "%s:", $0} END {print ""}')
+    # Find all kubeconfigs in ~/.kube and ~/.config/k3d
+    local kube_dirs=()
+    [[ -d "$HOME/.kube" ]] && kube_dirs+=("$HOME/.kube")
+    [[ -d "$HOME/.config/k3d" ]] && kube_dirs+=("$HOME/.config/k3d")
+    
+    if [[ ${#kube_dirs[@]} -gt 0 ]]; then
+        export KUBECONFIG=$(find "${kube_dirs[@]}" -name "config*" -o -name "kubeconfig*" | awk '{printf "%s:", $0} END {print ""}')
+    fi
   }
 kubeconfigRefresh
 

@@ -218,7 +218,7 @@ return {
       'nvim-lua/plenary.nvim',
       -- Optional: "nvim-telescope/telescope.nvim" for picker interfaces
     },
-    build = 'npm install -g mcp-hub@latest', -- Installs `mcp-hub` node binary globally
+    -- build = 'npm install -g mcp-hub@latest', -- Handled by bootstrap.sh
     config = function()
       require('mcphub').setup {
         port = 3000, -- Port for the mcp-hub Express server

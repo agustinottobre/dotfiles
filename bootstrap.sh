@@ -193,10 +193,24 @@ install_deps_linux() {
     if command -v apt-get >/dev/null 2>&1; then
         sudo apt-get update
         # Install base dependencies
-        local pkgs=(zsh tmux git fzf curl wget age)
+        local pkgs=(zsh tmux git curl wget age build-essential xsel)
         for pkg in "${pkgs[@]}"; do
             sudo apt-get install -y "$pkg" || warn "Package $pkg not found or failed to install via apt."
         done
+
+        # Install Node.js and npm (needed for some Neovim plugins like mcphub)
+        if ! command -v node >/dev/null 2>&1; then
+            log "Installing Node.js via NodeSource..."
+            curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+        fi
+
+        # Install global npm packages
+        if command -v npm >/dev/null 2>&1; then
+            log "Installing global npm packages (mcp-hub, tree-sitter-cli)..."
+            # Using 0.20.8 for tree-sitter-cli to ensure compatibility with older GLIBC (e.g. Debian 12)
+            sudo npm install -g mcp-hub@latest tree-sitter-cli@0.20.8 || warn "Failed to install some npm packages."
+        fi
     else
         warn "apt-get not found. Skipping apt installation."
     fi
@@ -204,6 +218,12 @@ install_deps_linux() {
     # Ensure local bin exists and is in PATH for the rest of the script
     mkdir -p "$HOME/.local/bin"
     export PATH="$HOME/.local/bin:$PATH"
+
+    # Install tpm (Tmux Plugin Manager)
+    if [[ ! -d "$HOME/.tmux/plugins/tpm" ]]; then
+        log "Installing tpm..."
+        git clone https://github.com/tmux-plugins/tpm "$HOME/.tmux/plugins/tpm"
+    fi
 
     # Install sops if missing
     if ! command -v sops >/dev/null 2>&1; then
@@ -240,6 +260,58 @@ install_deps_linux() {
             rm -rf "$TEMP_DIR"
             chmod +x "$HOME/.local/bin/age" "$HOME/.local/bin/age-keygen"
         fi
+    fi
+
+    # Install fzf if missing or needs integration
+    if [[ ! -d "$HOME/.fzf" || ! -f "$HOME/.fzf.zsh" || ! -f "$HOME/.local/bin/fzf" ]]; then
+        log "Installing/Configuring fzf (latest binary + Zsh integration)..."
+        [[ -d "$HOME/.fzf" ]] && rm -rf "$HOME/.fzf"
+        git clone --depth 1 https://github.com/junegunn/fzf.git "$HOME/.fzf"
+        
+        # Manually download the latest binary to ensure it supports toggle-raw (0.48.0+)
+        local ARCH=$(uname -m)
+        local FZF_ARCH="linux_amd64"
+        [[ "$ARCH" == "aarch64" ]] && FZF_ARCH="linux_arm64"
+        
+        local FZF_VERSION=$(curl -s https://api.github.com/repos/junegunn/fzf/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        if [[ -n "$FZF_VERSION" ]]; then
+            # Strip leading 'v' for the filename (e.g., v0.72.0 -> 0.72.0)
+            local FZF_VER_STRIPPED="${FZF_VERSION#v}"
+            log "Downloading fzf $FZF_VERSION..."
+            if curl -SfL -o "$HOME/.local/bin/fzf.tar.gz" "https://github.com/junegunn/fzf/releases/download/${FZF_VERSION}/fzf-${FZF_VER_STRIPPED}-${FZF_ARCH}.tar.gz"; then
+                tar -xzf "$HOME/.local/bin/fzf.tar.gz" -C "$HOME/.local/bin"
+                rm "$HOME/.local/bin/fzf.tar.gz"
+                chmod +x "$HOME/.local/bin/fzf"
+                success "fzf $FZF_VERSION installed to $HOME/.local/bin"
+            else
+                warn "Failed to download fzf binary. Falling back to system version or git installer."
+            fi
+        fi
+
+        # Run installer for scripts only (bin is already handled)
+        "$HOME/.fzf/install" --bin --key-bindings --completion --no-update-rc --no-bash --no-fish
+        
+        # Explicitly create/overwrite ~/.fzf.zsh with prioritized PATH
+        cat > "$HOME/.fzf.zsh" <<EOF
+# Setup fzf
+# ---------
+# Prepend local bin to ensure we use the version that supports toggle-raw
+if [[ ! "\$PATH" == *\$HOME/.local/bin* ]]; then
+  export PATH="\$HOME/.local/bin:\$PATH"
+fi
+
+if [[ ! "\$PATH" == *\$HOME/.fzf/bin* ]]; then
+  export PATH="\$PATH:\$HOME/.fzf/bin"
+fi
+
+# Auto-completion
+# ---------------
+[[ \$- == *i* ]] && source "\$HOME/.fzf/shell/completion.zsh" 2> /dev/null
+
+# Key bindings
+# ------------
+source "\$HOME/.fzf/shell/key-bindings.zsh"
+EOF
     fi
 
     # Install Neovim Nightly
@@ -368,8 +440,14 @@ fi
 # 4. Finalize
 # -----------------------------------------------------------------------------
 log "Setting up Zsh as default shell..."
-if [[ "$SHELL" != "$(which zsh)" ]]; then
-    chsh -s "$(which zsh)"
+ZSH_PATH=$(which zsh)
+if [[ "$SHELL" != "$ZSH_PATH" ]]; then
+    if [[ "$OS_TYPE" == "linux" ]]; then
+        # Try usermod first (works better on some systems non-interactively if sudo is available)
+        sudo usermod -s "$ZSH_PATH" "$(whoami)" || chsh -s "$ZSH_PATH" || warn "Failed to change shell. Please run: chsh -s $ZSH_PATH"
+    else
+        chsh -s "$ZSH_PATH" || warn "Failed to change shell. Please run: chsh -s $ZSH_PATH"
+    fi
 fi
 
 success "Bootstrap complete! Please restart your shell."

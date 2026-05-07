@@ -261,13 +261,17 @@ function command_result (){
     fi
 }
 
-# Finder cd
+# Finder cd (macOS only)
 cdf() {
-  target=`osascript -e 'tell application "Finder" to if (count of Finder windows) > 0 then get POSIX path of (target of front Finder window as text)'`
-  if [ "$target" != "" ]; then
-    cd "$target"; pwd
+  if [[ "$OSTYPE" == darwin* ]]; then
+    target=`osascript -e 'tell application "Finder" to if (count of Finder windows) > 0 then get POSIX path of (target of front Finder window as text)'`
+    if [ "$target" != "" ]; then
+      cd "$target"; pwd
+    else
+      echo 'No Finder window found' >&2
+    fi
   else
-    echo 'No Finder window found' >&2
+    echo "cdf is only available on macOS" >&2
   fi
 }
 
@@ -283,7 +287,14 @@ function k3dconfigwall(){
 
 # Kubernetes config
 function kubeconfigRefresh() {
-  export KUBECONFIG=$(find "$HOME/.kube" "$HOME/.config/k3d" -name "config*" -o -name "kubeconfig*" | awk '{printf "%s:", $0} END {print ""}')
+  # Find all kubeconfigs in ~/.kube and ~/.config/k3d
+  local kube_dirs=()
+  [[ -d "$HOME/.kube" ]] && kube_dirs+=("$HOME/.kube")
+  [[ -d "$HOME/.config/k3d" ]] && kube_dirs+=("$HOME/.config/k3d")
+  
+  if [[ ${#kube_dirs[@]} -gt 0 ]]; then
+    export KUBECONFIG=$(find "${kube_dirs[@]}" -name "config*" -o -name "kubeconfig*" | awk '{printf "%s:", $0} END {print ""}')
+  fi
 }
 kubeconfigRefresh
 
@@ -332,4 +343,4 @@ sdk() {
 
 set -o vi
 set +o noclobber
-bindkey "^[[C" fzf-cd-widget
+# bindkey "^[[C" fzf-cd-widget # Removed redundant/wrong Right Arrow binding
