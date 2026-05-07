@@ -1018,7 +1018,6 @@ require('lazy').setup({
 
   { -- Highlight, edit, and navigate code
     'nvim-treesitter/nvim-treesitter',
-    version = 'v0.9.3',
     opts = {
       ensure_installed = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc' },
       auto_install = true,
@@ -1027,8 +1026,13 @@ require('lazy').setup({
     },
     config = function(_, opts)
       require('nvim-treesitter.install').prefer_git = true
-      ---@diagnostic disable-next-line: missing-fields
-      require('nvim-treesitter.configs').setup(opts)
+      local ok, configs = pcall(require, 'nvim-treesitter.configs')
+      if ok then
+        configs.setup(opts)
+      else
+        -- Fallback for newer versions where configs might be removed or moved
+        require('nvim-treesitter').setup(opts)
+      end
     end,
   },
 

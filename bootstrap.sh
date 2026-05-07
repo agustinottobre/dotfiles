@@ -215,24 +215,21 @@ install_deps_linux() {
     mkdir -p "$HOME/.local/bin"
     export PATH="$HOME/.local/bin:$PATH"
 
-    # Install tree-sitter CLI from GitHub (more compatible than npm binary)
-    if ! command -v tree-sitter >/dev/null 2>&1; then
-        log "Installing tree-sitter CLI from GitHub..."
-        local ARCH=$(uname -m)
-        local TS_ARCH="linux-x64"
-        [[ "$ARCH" == "aarch64" ]] && TS_ARCH="linux-arm64"
-        
-        local TS_VERSION=$(curl -s https://api.github.com/repos/tree-sitter/tree-sitter/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-        if [[ -n "$TS_VERSION" ]]; then
-            log "Downloading tree-sitter $TS_VERSION for $TS_ARCH..."
-            curl -L -o "/tmp/tree-sitter.gz" "https://github.com/tree-sitter/tree-sitter/releases/download/${TS_VERSION}/tree-sitter-${TS_ARCH}.gz"
-            gunzip -f "/tmp/tree-sitter.gz"
-            mv "/tmp/tree-sitter" "$HOME/.local/bin/tree-sitter"
-            chmod +x "$HOME/.local/bin/tree-sitter"
-            success "tree-sitter CLI installed to $HOME/.local/bin"
-        else
-            warn "Could not determine latest tree-sitter version."
-        fi
+    # Install tree-sitter CLI from GitHub (pin to v0.25.2 for GLIBC compatibility)
+    log "Installing/Updating tree-sitter CLI v0.25.2..."
+    local ARCH=$(uname -m)
+    local TS_ARCH="linux-x64"
+    [[ "$ARCH" == "aarch64" ]] && TS_ARCH="linux-arm64"
+    
+    local TS_VERSION="v0.25.2"
+    log "Downloading tree-sitter $TS_VERSION for $TS_ARCH..."
+    if curl -L -o "/tmp/tree-sitter.gz" "https://github.com/tree-sitter/tree-sitter/releases/download/${TS_VERSION}/tree-sitter-${TS_ARCH}.gz"; then
+        gunzip -f "/tmp/tree-sitter.gz"
+        mv "/tmp/tree-sitter" "$HOME/.local/bin/tree-sitter"
+        chmod +x "$HOME/.local/bin/tree-sitter"
+        success "tree-sitter CLI $TS_VERSION installed to $HOME/.local/bin"
+    else
+        warn "Failed to download tree-sitter binary."
     fi
 
     # Install tpm (Tmux Plugin Manager)
