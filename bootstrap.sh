@@ -207,17 +207,33 @@ install_deps_linux() {
 
         # Install global npm packages
         if command -v npm >/dev/null 2>&1; then
-            log "Installing global npm packages (mcp-hub, tree-sitter-cli)..."
-            # Using 0.20.8 for tree-sitter-cli to ensure compatibility with older GLIBC (e.g. Debian 12)
-            sudo npm install -g mcp-hub@latest tree-sitter-cli@0.20.8 || warn "Failed to install some npm packages."
+            log "Installing global npm packages (mcp-hub)..."
+            sudo npm install -g mcp-hub@latest || warn "Failed to install mcp-hub."
         fi
-    else
-        warn "apt-get not found. Skipping apt installation."
-    fi
 
     # Ensure local bin exists and is in PATH for the rest of the script
     mkdir -p "$HOME/.local/bin"
     export PATH="$HOME/.local/bin:$PATH"
+
+    # Install tree-sitter CLI from GitHub (more compatible than npm binary)
+    if ! command -v tree-sitter >/dev/null 2>&1; then
+        log "Installing tree-sitter CLI from GitHub..."
+        local ARCH=$(uname -m)
+        local TS_ARCH="linux-x64"
+        [[ "$ARCH" == "aarch64" ]] && TS_ARCH="linux-arm64"
+        
+        local TS_VERSION=$(curl -s https://api.github.com/repos/tree-sitter/tree-sitter/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        if [[ -n "$TS_VERSION" ]]; then
+            log "Downloading tree-sitter $TS_VERSION for $TS_ARCH..."
+            curl -L -o "/tmp/tree-sitter.gz" "https://github.com/tree-sitter/tree-sitter/releases/download/${TS_VERSION}/tree-sitter-${TS_ARCH}.gz"
+            gunzip -f "/tmp/tree-sitter.gz"
+            mv "/tmp/tree-sitter" "$HOME/.local/bin/tree-sitter"
+            chmod +x "$HOME/.local/bin/tree-sitter"
+            success "tree-sitter CLI installed to $HOME/.local/bin"
+        else
+            warn "Could not determine latest tree-sitter version."
+        fi
+    fi
 
     # Install tpm (Tmux Plugin Manager)
     if [[ ! -d "$HOME/.tmux/plugins/tpm" ]]; then
@@ -343,6 +359,9 @@ EOF
         else
             warn "Neovim AppImage only supported on x86_64. Skipping."
         fi
+    fi
+    else
+        warn "apt-get not found. Skipping apt installation."
     fi
 }
 

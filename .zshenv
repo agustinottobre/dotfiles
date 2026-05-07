@@ -34,7 +34,7 @@ export PATH=$PATH:$HOME/bin/gs-venv/bin
 export PATH=$PATH:$HOME/.local/bin/lvim
 
 # pipx
-export PATH="$PATH:$HOME/.local/bin"
+export PATH="$HOME/.local/bin:$PATH"
 
 # Dart/Flutter
 export PATH="$PATH":"$HOME/.pub-cache/bin"
