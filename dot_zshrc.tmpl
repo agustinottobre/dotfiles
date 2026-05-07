@@ -1,3 +1,10 @@
+# OPENSPEC:START
+# OpenSpec shell completions configuration
+fpath=("/Users/aox/.zsh/completions" $fpath)
+autoload -Uz compinit
+compinit
+# OPENSPEC:END
+
 # =============================================================================
 # ZIM + Starship Configuration
 # Pure zsh setup (no shell_profile)
@@ -70,16 +77,16 @@ compdef wiki=git
 alias ll='ls -lha'
 
 # Editors
-NVIM_PATH=$(command -v nvim || command -v vim)
-alias vi="$NVIM_PATH"
-alias vim="$NVIM_PATH"
-alias vimdiff="$NVIM_PATH -d"
+NVIM_PATH='/bin/nvim'
+alias vi=$NVIM_PATH
+alias vim=$NVIM_PATH
+alias vimdiff='$NVIM_PATH -d'
 
 # Utils
 alias calc='qalc'
 alias composer='php /usr/local/bin/composer.phar'
 alias resetlast="git reset --soft 'HEAD^'"
-alias git_use_vim="git config --global core.editor $NVIM_PATH"
+alias git_use_vim='git config --global core.editor $NVIM_PATH'
 
 # Git
 alias gittree='git log --tags --pretty="%H %d" --decorate=full --graph'
@@ -101,50 +108,16 @@ alias todo='vim -c "botright Todo"'
 
 # Dotfiles management
 function config(){
-  local dot_dir="$HOME/dotfiles"
   if [[ $# == 0 ]]
   then
-    # Use git -C to run git commands in the dotfiles directory
-    configfile=$(git -C "$dot_dir" ls-tree -r HEAD --name-only | fzf-tmux --height 40% --layout=reverse)
+    configfile=$(git --git-dir=$HOME/dotfiles/ ls-tree -r master --name-only | fzf-tmux --height 40% --layout=reverse | xargs -I {} echo "$HOME/"/{})
     if [ ! -z ${configfile} ]
     then 
-      # Open the file in the repository (Vim handles symlink resolution if we edit the home version, but this is cleaner)
-      vim "$dot_dir/$configfile"
+      vim $configfile
     fi
   else
-    git -C "$dot_dir" "${@:1}"
+    git --git-dir=$HOME/dotfiles/ --work-tree=$HOME "${@:1}"
   fi
-}
-
-# Secret management
-function secrets() {
-    local dot_dir="$HOME/dotfiles"
-    case "$1" in
-        decrypt|encrypt|cleanup)
-            "$dot_dir/bootstrap.sh" --"$1"
-            ;;
-        add)
-            if [[ -z "$2" ]]; then
-                echo "Usage: secrets add <file>"
-                return 1
-            fi
-            # Logic to encrypt a new file and add .sops extension
-            local pubkey_file="$HOME/.dotfiles_public_key"
-            local sops_yaml="$dot_dir/.sops.yaml"
-            if [[ -f "$sops_yaml" ]]; then
-                sops --encrypt --input-type binary "$2" > "$2.sops"
-            elif [[ -f "$pubkey_file" ]]; then
-                sops --encrypt --input-type binary --age "$(cat "$pubkey_file")" "$2" > "$2.sops"
-            else
-                echo "Public key not found. Run 'secrets encrypt' once to set it up, or create .sops.yaml"
-                return 1
-            fi
-            echo "Encrypted $2 to $2.sops"
-            ;;
-        *)
-            echo "Usage: secrets [decrypt|encrypt|cleanup|add <file>]"
-            ;;
-    esac
 }
 
 # Wiki
@@ -261,17 +234,13 @@ function command_result (){
     fi
 }
 
-# Finder cd (macOS only)
+# Finder cd
 cdf() {
-  if [[ "$OSTYPE" == darwin* ]]; then
-    target=`osascript -e 'tell application "Finder" to if (count of Finder windows) > 0 then get POSIX path of (target of front Finder window as text)'`
-    if [ "$target" != "" ]; then
-      cd "$target"; pwd
-    else
-      echo 'No Finder window found' >&2
-    fi
+  target=`osascript -e 'tell application "Finder" to if (count of Finder windows) > 0 then get POSIX path of (target of front Finder window as text)'`
+  if [ "$target" != "" ]; then
+    cd "$target"; pwd
   else
-    echo "cdf is only available on macOS" >&2
+    echo 'No Finder window found' >&2
   fi
 }
 
@@ -287,14 +256,7 @@ function k3dconfigwall(){
 
 # Kubernetes config
 function kubeconfigRefresh() {
-  # Find all kubeconfigs in ~/.kube and ~/.config/k3d
-  local kube_dirs=()
-  [[ -d "$HOME/.kube" ]] && kube_dirs+=("$HOME/.kube")
-  [[ -d "$HOME/.config/k3d" ]] && kube_dirs+=("$HOME/.config/k3d")
-  
-  if [[ ${#kube_dirs[@]} -gt 0 ]]; then
-    export KUBECONFIG=$(find "${kube_dirs[@]}" -name "config*" -o -name "kubeconfig*" | awk '{printf "%s:", $0} END {print ""}')
-  fi
+  export KUBECONFIG=$(find "$HOME/.kube" "$HOME/.config/k3d" -name "config*" -o -name "kubeconfig*" | awk '{printf "%s:", $0} END {print ""}')
 }
 kubeconfigRefresh
 
@@ -343,4 +305,27 @@ sdk() {
 
 set -o vi
 set +o noclobber
-# bindkey "^[[C" fzf-cd-widget # Removed redundant/wrong Right Arrow binding
+bindkey "^[[C" fzf-cd-widget
+
+# bun completions
+[ -s "/Users/aox/.bun/_bun" ] && source "/Users/aox/.bun/_bun"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
+
+# PAI alias
+alias pai='bun /Users/aox/.claude/PAI/Tools/pai.ts'
+
+alias claude-mem='bun "/Users/aox/.claude/plugins/marketplaces/thedotmack/plugin/scripts/worker-service.cjs"'
+
+# Added by Antigravity
+export PATH="/Users/aox/.antigravity/antigravity/bin:$PATH"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+
+# opencode
+export PATH=/root/.opencode/bin:$PATH

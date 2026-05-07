@@ -10,7 +10,7 @@ xsel
 # Neovim Dependencies
 age
 nodejs
+npm
 
 # Other tools
 fzf
-sops

@@ -7,9 +7,6 @@ if [[ ( "$SHLVL" -eq 1 && ! -o LOGIN ) && -s "${ZDOTDIR:-$HOME}/.zprofile" ]]; t
   source "${ZDOTDIR:-$HOME}/.zprofile"
 fi
 
-# Load environment profile if it exists
-[[ -f ~/.dotfiles_profile ]] && source ~/.dotfiles_profile
-
 # Cargo/Rust - sourced for all shell types
 [ -s "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
 
@@ -18,13 +15,11 @@ fi
 # =============================================================================
 
 # Go
-export GOPATH=$HOME/Dev
-if command -v brew >/dev/null 2>&1; then
-    export GOROOT="$(brew --prefix golang)/libexec"
-fi
-export GOPROXY=https://proxy.golang.org,direct
-export GOSUMDB="sum.golang.org"
-export PATH=$PATH:$GOPATH/bin:${GOROOT:+$GOROOT/bin}
+#export GOPATH=$HOME/Dev
+#export GOROOT="$(brew --prefix golang)/libexec"
+#export GOPROXY=https://proxy.golang.org,direct
+#export GOSUMDB="sum.golang.org"
+#export PATH=$PATH:$GOPATH/bin:$GOROOT/bin
 
 # Tools
 export PATH=$PATH:$HOME/Tools/bin
@@ -34,7 +29,7 @@ export PATH=$PATH:$HOME/bin/gs-venv/bin
 export PATH=$PATH:$HOME/.local/bin/lvim
 
 # pipx
-export PATH="$HOME/.local/bin:$PATH"
+export PATH="$PATH:$HOME/.local/bin"
 
 # Dart/Flutter
 export PATH="$PATH":"$HOME/.pub-cache/bin"

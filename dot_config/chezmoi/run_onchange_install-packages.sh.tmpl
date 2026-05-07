@@ -66,9 +66,35 @@ setup_debian() {
     # Install Neovim Nightly AppImage
     if ! command_exists nvim; then
         echo "Installing Neovim Nightly AppImage..."
+        local nvim_bin="{{ .chezmoi.homeDir }}/.local/bin/nvim"
         mkdir -p "{{ .chezmoi.homeDir }}/.local/bin"
-        curl -L -o "{{ .chezmoi.homeDir }}/.local/bin/nvim" https://github.com/neovim/neovim/releases/download/nightly/nvim-linux-x86_64.appimage
-        chmod u+x "{{ .chezmoi.homeDir }}/.local/bin/nvim"
+        curl -L -o "$nvim_bin" https://github.com/neovim/neovim/releases/download/nightly/nvim-linux-x86_64.appimage
+        chmod u+x "$nvim_bin"
+        
+        # Check if FUSE is available, if not, extract the AppImage
+        if ! "$nvim_bin" --version >/dev/null 2>&1; then
+            echo "FUSE not detected or AppImage failed to run. Extracting as fallback..."
+            local old_pwd=$(pwd)
+            cd "{{ .chezmoi.homeDir }}/.local/bin"
+            ./nvim --appimage-extract >/dev/null
+            mv squashfs-root nvim-extracted
+            # Create a wrapper script
+            cat > nvim <<EOF
+#!/bin/bash
+{{ .chezmoi.homeDir }}/.local/bin/nvim-extracted/AppRun "\$@"
+EOF
+            chmod +x nvim
+            cd "$old_pwd"
+            echo "Neovim installed via extraction."
+        fi
+    fi
+
+    # Install sops from GitHub
+    if ! command_exists sops; then
+        echo "Installing sops from GitHub..."
+        local sops_version=$(curl -s https://api.github.com/repos/getsops/sops/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        curl -L -o "{{ .chezmoi.homeDir }}/.local/bin/sops" "https://github.com/getsops/sops/releases/download/${sops_version}/sops-${sops_version}.linux.amd64"
+        chmod +x "{{ .chezmoi.homeDir }}/.local/bin/sops"
     fi
 
     install_npm_packages
@@ -95,8 +121,18 @@ exit 1
 
 # Final post-install actions
 if command_exists tmux; then
+    # Install tpm if missing
+    tpm_dir="{{ .chezmoi.homeDir }}/.tmux/plugins/tpm"
+    if [ ! -d "$tpm_dir" ]; then
+        echo "Installing tpm..."
+        git clone https://github.com/tmux-plugins/tpm "$tpm_dir"
+    fi
+    
     echo "Installing tmux plugins..."
-    "{{ .chezmoi.homeDir }}/.tmux/plugins/tpm/bin/install_plugins"
+    # Set the path explicitly to help the installer find where to put things
+    export TMUX_PLUGIN_MANAGER_PATH="{{ .chezmoi.homeDir }}/.tmux/plugins/"
+    # Run the installer, pointing it to the applied config file
+    "$tpm_dir/bin/install_plugins" || echo "Note: some tmux plugins might need a manual 'prefix + I' inside tmux."
 fi
 
 echo "Package installation and setup complete!"
