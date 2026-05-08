@@ -97,6 +97,16 @@ EOF
         chmod +x "{{ .chezmoi.homeDir }}/.local/bin/sops"
     fi
 
+    # Ensure age key exists for chezmoi
+    local key_file="{{ .chezmoi.homeDir }}/.config/chezmoi/key.txt"
+    if [ ! -f "$key_file" ]; then
+        echo "Generating age key for chezmoi..."
+        mkdir -p "$(dirname "$key_file")"
+        age-keygen -o "$key_file"
+        echo "Age key generated at $key_file"
+        echo "Your public key is: $(grep 'public key:' "$key_file" | cut -d' ' -f4)"
+    fi
+
     install_npm_packages
 }
 
