@@ -25,8 +25,27 @@ source ${ZIM_HOME}/init.zsh
 # Completions & FZF (must be sourced early)
 # =============================================================================
 
-# Source FZF first (provides keybindings)
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+# Source FZF keybindings
+# Homebrew (macOS): ~/.fzf.zsh — checked first, covers all Homebrew installs
+# Linux: various system paths checked as fallback
+# macOS non-Homebrew: Intel Mac Homebrew share dir, MacPorts, Apple Silicon Homebrew
+if [[ -f ~/.fzf.zsh ]]; then
+  source ~/.fzf.zsh
+{{- if eq .chezmoi.os "linux" }}
+elif [[ -f /usr/share/fzf/key-bindings.zsh ]]; then
+  source /usr/share/fzf/key-bindings.zsh
+elif [[ -f /usr/share/doc/fzf/examples/key-bindings.zsh ]]; then
+  source /usr/share/doc/fzf/examples/key-bindings.zsh
+{{- else }}
+# macOS non-Homebrew fallback paths (Intel Mac Homebrew, MacPorts, Apple Silicon Homebrew)
+elif [[ -f /usr/local/opt/fzf/share/fzf/key-bindings.zsh ]]; then
+  source /usr/local/opt/fzf/share/fzf/key-bindings.zsh
+elif [[ -f /opt/homebrew/share/fzf/key-bindings.zsh ]]; then
+  source /opt/homebrew/share/fzf/key-bindings.zsh
+#elif [[ -f /opt/local/share/fzf/key-bindings.zsh ]]; then
+#  source /opt/local/share/fzf/key-bindings.zsh
+{{- end }}
+fi
 
 # Explicitly bind fzf keys (ensures they work if overridden elsewhere)
 bindkey '^X^F' fzf-file-widget
