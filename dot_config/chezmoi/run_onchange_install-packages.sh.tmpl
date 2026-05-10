@@ -13,12 +13,7 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Helper to run command with timeout
-run_with_timeout() {
-    local timeout=$1
-    shift
-    timeout "$timeout" "$@" 2>/dev/null || true
-}
+
 
 # --- Package Installation Functions ---
 
@@ -71,14 +66,28 @@ install_fnm() {
 # --- Starship Installation (cross-platform) ---
 
 install_starship() {
-    if command_exists starship; then
-        echo "Starship already installed."
-        return
-    fi
+  if command_exists starship; then
+    echo "Starship already installed."
+    return
+  fi
 
-    echo "Installing Starship..."
-    # Use timeout to avoid hanging
-    run_with_timeout 60 bash -c 'curl -sS https://starship.dev/install.sh | sh -s -- -y' || echo "Starship install timed out or failed - continuing..."
+  echo "Installing Starship..."
+  # Try the official installer first (requires bash, not sh)
+  if timeout 60 bash -c 'curl -sS https://starship.dev/install.sh | bash -s -- -y' 2>/dev/null && command_exists starship; then
+    echo "Starship installed via official installer."
+    return
+  fi
+
+  # Fallback: install directly from GitHub releases
+  echo "Official installer failed. Installing from GitHub releases..."
+  local arch=$(uname -m)
+  local starship_url="https://github.com/starship/starship/releases/latest/download/starship-${arch}-unknown-linux-gnu.tar.gz"
+  if curl -fsSL "$starship_url" | tar -xzf - -C /usr/local/bin starship 2>/dev/null; then
+    chmod +x /usr/local/bin/starship
+    echo "Starship installed from GitHub releases."
+  else
+    echo "WARNING: Starship installation failed. Install manually: https://starship.rs/"
+  fi
 }
 
 # --- Neovim on Linux (AppImage) ---
