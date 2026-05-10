@@ -6,11 +6,14 @@ wget
 zsh
 tmux
 xsel
-
-# Neovim Dependencies
-age
-nodejs
-npm
-
-# Other tools
+ripgrep
+unzip
 fzf
+
+# Neovim - installed via AppImage in install script
+# age  # for chezmoi encryption
+
+# Starship prompt (installed by script)
+
+# Taskwarrior
+task

@@ -1,148 +1,180 @@
 #!/bin/bash
+# =============================================================================
+# chezmoi run_onchange script: Install packages based on OS
+# Triggered whenever chezmoi apply runs
+# =============================================================================
 
-set -e
-set -o pipefail
+# Allow script to continue even if individual commands fail
+# set -e  # Disabled - we handle errors manually
+# set -o pipefail
 
 # Helper to check if a command exists
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Helper to run command with timeout
+run_with_timeout() {
+    local timeout=$1
+    shift
+    timeout "$timeout" "$@" 2>/dev/null || true
+}
+
 # --- Package Installation Functions ---
 
 install_apt_packages() {
     echo "Updating apt repositories..."
-    sudo apt-get update
+    sudo apt-get update -qq
     echo "Installing packages from apt.txt..."
-    packages=$(cat "{{ .chezmoi.sourceDir }}/packages/apt.txt" | grep -vE "^\s*#|^\s*$" | tr '
-' ' ')
-    sudo apt-get install -y $packages
+    local packages=$(sed -e 's/^#.*//' -e 's/^$/DONE/' "{{ .chezmoi.sourceDir }}/packages/apt.txt" 2>/dev/null | grep -v DONE | tr '\n' ' ')
+    if [ -n "$packages" ]; then
+        # Try packages in batches, skipping any that fail
+        for pkg in $packages; do
+            sudo apt-get install -y -qq "$pkg" 2>/dev/null || true
+        done
+    fi
 }
 
 install_brew_packages() {
     if ! command_exists brew; then
-        echo "Homebrew not found. Please install it first from https://brew.sh/"
-        exit 1
-    fi
-    echo "Updating Homebrew..."
-    brew update
-    echo "Installing packages from brew.txt..."
-    packages=$(cat "{{ .chezmoi.sourceDir }}/packages/brew.txt" | grep -vE "^\s*#|^\s*$" | tr '
-' ' ')
-    brew install $packages
-}
-
-install_npm_packages() {
-    if ! command_exists npm; then
-        echo "npm not found. Please install Node.js first."
+        echo "Homebrew not found. Skipping brew packages."
         return
     fi
-    echo "Installing global npm packages..."
-    packages=$(cat "{{ .chezmoi.sourceDir }}/packages/npm.txt" | grep -vE "^\s*#|^\s*$" | tr '
-' ' ')
-    sudo npm install -g $packages
+    echo "Updating Homebrew..."
+    brew update -q
+    echo "Installing packages from brew.txt..."
+    local packages=$(sed -e 's/^#.*//' -e 's/^$/DONE/' "{{ .chezmoi.sourceDir }}/packages/brew.txt" 2>/dev/null | grep -v DONE | tr '\n' ' ')
+    if [ -n "$packages" ]; then
+        # Try packages individually, skipping any that fail
+        for pkg in $packages; do
+            brew install -q "$pkg" 2>/dev/null || true
+        done
+    fi
 }
 
-# --- OS Specific Setup ---
+# --- FNM Installation (cross-platform) ---
 
-setup_debian() {
-    echo "Running Debian/Ubuntu setup..."
-    install_apt_packages
+install_fnm() {
+    local fnm_dir="$HOME/.fnm"
+    local fnm_exe="$fnm_dir/fnm"
 
-    # Special case: Install Tree-sitter CLI v0.25.2 for GLIBC compatibility
-    echo "Installing/Updating tree-sitter CLI v0.25.2..."
-    local ts_path="{{ .chezmoi.homeDir }}/.local/bin/tree-sitter"
-    if [ ! -f "$ts_path" ] || [[ ! "$($ts_path --version 2>/dev/null)" == *"0.25.2"* ]]; then
-        mkdir -p "{{ .chezmoi.homeDir }}/.local/bin"
-        curl -L -o "/tmp/tree-sitter.gz" "https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.2/tree-sitter-linux-x64.gz"
-        gunzip -f "/tmp/tree-sitter.gz"
-        mv "/tmp/tree-sitter" "$ts_path"
-        chmod +x "$ts_path"
-        echo "tree-sitter CLI v0.25.2 installed to $ts_path"
-    else
-        echo "tree-sitter CLI v0.25.2 is already installed."
+    if command_exists fnm && [ -f "$fnm_exe" ]; then
+        echo "FNM already installed."
+        return
     fi
 
-    # Install Neovim Nightly AppImage
-    if ! command_exists nvim; then
-        echo "Installing Neovim Nightly AppImage..."
-        local nvim_bin="{{ .chezmoi.homeDir }}/.local/bin/nvim"
-        mkdir -p "{{ .chezmoi.homeDir }}/.local/bin"
-        curl -L -o "$nvim_bin" https://github.com/neovim/neovim/releases/download/nightly/nvim-linux-x86_64.appimage
-        chmod u+x "$nvim_bin"
-        
-        # Check if FUSE is available, if not, extract the AppImage
-        if ! "$nvim_bin" --version >/dev/null 2>&1; then
-            echo "FUSE not detected or AppImage failed to run. Extracting as fallback..."
-            local old_pwd=$(pwd)
-            cd "{{ .chezmoi.homeDir }}/.local/bin"
-            ./nvim --appimage-extract >/dev/null
-            mv squashfs-root nvim-extracted
-            # Create a wrapper script
-            cat > nvim <<EOF
-#!/bin/bash
-{{ .chezmoi.homeDir }}/.local/bin/nvim-extracted/AppRun "\$@"
-EOF
+    echo "Installing FNM..."
+    curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir "$fnm_dir" --skip-shell
+    echo "FNM installed to $fnm_dir"
+}
+
+# --- Starship Installation (cross-platform) ---
+
+install_starship() {
+    if command_exists starship; then
+        echo "Starship already installed."
+        return
+    fi
+
+    echo "Installing Starship..."
+    # Use timeout to avoid hanging
+    run_with_timeout 60 bash -c 'curl -sS https://starship.dev/install.sh | sh -s -- -y' || echo "Starship install timed out or failed - continuing..."
+}
+
+# --- Neovim on Linux (AppImage) ---
+
+install_neovim_linux() {
+    local nvim_bin="{{ .chezmoi.homeDir }}/.local/bin/nvim"
+    local nvim_version
+
+    if command_exists nvim; then
+        echo "Neovim already installed."
+        return
+    fi
+
+    echo "Installing Neovim (latest AppImage)..."
+
+    # Try to get latest version or fall back to known stable
+    nvim_version=$(curl -sL https://api.github.com/repos/neovim/neovim/releases/latest 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' || echo "v0.10.0")
+    nvim_version=${nvim_version#v}
+
+    mkdir -p "{{ .chezmoi.homeDir }}/.local/bin"
+
+    curl -fsSL -o "$nvim_bin" "https://github.com/neovim/neovim/releases/download/v${nvim_version}/nvim-linux-x86_64.appimage"
+    chmod u+x "$nvim_bin"
+
+    # Check if FUSE is available, if not, extract the AppImage
+    if ! "$nvim_bin" --version >/dev/null 2>&1; then
+        echo "FUSE not detected. Extracting AppImage..."
+        local old_pwd=$(pwd)
+        cd "{{ .chezmoi.homeDir }}/.local/bin"
+        "$nvim_bin" --appimage-extract >/dev/null 2>&1 || true
+        if [ -d "squashfs-root" ]; then
+            rm -rf "nvim-extracted"
+            mv "squashfs-root" "nvim-extracted"
+            printf '#!/bin/bash\n%s/.local/bin/nvim-extracted/AppRun "$@"\n' "$HOME" > nvim
             chmod +x nvim
-            cd "$old_pwd"
-            echo "Neovim installed via extraction."
         fi
+        cd "$old_pwd"
     fi
 
-    # Install sops from GitHub
-    if ! command_exists sops; then
-        echo "Installing sops from GitHub..."
-        local sops_version=$(curl -s https://api.github.com/repos/getsops/sops/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-        curl -L -o "{{ .chezmoi.homeDir }}/.local/bin/sops" "https://github.com/getsops/sops/releases/download/${sops_version}/sops-${sops_version}.linux.amd64"
-        chmod +x "{{ .chezmoi.homeDir }}/.local/bin/sops"
+    echo "Neovim installed to $nvim_bin"
+}
+
+# --- TPM (Tmux Plugin Manager) Installation ---
+
+install_tpm() {
+    local tpm_dir="{{ .chezmoi.homeDir }}/.tmux/plugins/tpm"
+
+    if [ -d "$tpm_dir" ]; then
+        echo "TPM already installed."
+        return
     fi
 
-    # Ensure age key exists for chezmoi
+    echo "Installing TPM..."
+    git clone -q https://github.com/tmux-plugins/tpm "$tpm_dir"
+}
+
+# --- Age Key for Chezmoi ---
+
+install_age_key() {
     local key_file="{{ .chezmoi.homeDir }}/.config/chezmoi/key.txt"
-    if [ ! -f "$key_file" ]; then
-        echo "Generating age key for chezmoi..."
+
+    if [ -f "$key_file" ]; then
+        echo "Age key already exists."
+        return
+    fi
+
+    if command_exists age-keygen; then
+        echo "Generating age key..."
         mkdir -p "$(dirname "$key_file")"
         age-keygen -o "$key_file"
         echo "Age key generated at $key_file"
-        echo "Your public key is: $(grep 'public key:' "$key_file" | cut -d' ' -f4)"
+    else
+        echo "age-keygen not found. Skipping key generation."
     fi
-
-    install_npm_packages
 }
 
-setup_macos() {
-    echo "Running macOS setup..."
+# --- OS-specific main ---
+
+main() {
+    echo "=== Package Installation & Setup ==="
+
+    {{ if eq .chezmoi.os "linux" -}}
+    install_apt_packages
+    install_neovim_linux
+    {{ else if eq .chezmoi.os "darwin" -}}
     install_brew_packages
-    install_npm_packages
+    {{ end -}}
+
+    install_fnm
+    install_starship
+    install_tpm
+    install_age_key
+
+    echo "=== Setup Complete ==="
+    echo "NOTE: You may need to restart your shell or source ~/.zshrc"
+    echo "For tmux plugins: run 'prefix + I' inside tmux"
 }
 
-# --- Main Execution ---
-
-echo "Starting package installation..."
-
-{{ if eq .chezmoi.os "linux" -}}
-setup_debian
-{{ else if eq .chezmoi.os "darwin" -}}
-setup_macos
-{{ else -}}
-echo "Unsupported OS: {{ .chezmoi.os }}"
-exit 1
-{{ end -}}
-
-# Final post-install actions
-if command_exists tmux; then
-    # Install tpm if missing
-    tpm_dir="{{ .chezmoi.homeDir }}/.tmux/plugins/tpm"
-    if [ ! -d "$tpm_dir" ]; then
-        echo "Installing tpm..."
-        git clone https://github.com/tmux-plugins/tpm "$tpm_dir"
-    fi
-    
-    echo "Installing tmux plugins..."
-    # Set the path explicitly to help the installer find where to put things
-    export TMUX_PLUGIN_MANAGER_PATH="{{ .chezmoi.homeDir }}/.tmux/plugins/"
-    # Run the installer, pointing it to the applied config file
-    "$tpm_dir/bin/install_plugins" || echo "Note: some tmux plugins might need a manual 'prefix + I' inside tmux."
-fi
-
-echo "Package installation and setup complete!"
+main "$@"

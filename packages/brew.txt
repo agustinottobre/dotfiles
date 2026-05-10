@@ -1,12 +1,17 @@
-# Core
+# Core CLI tools
 fzf
-neovim
-zsh
+ripgrep
 git
-go
-sops
-age
-tree-sitter
-
-# Other
+zsh
 tmux
+
+# Node.js via FNM (installed by script)
+
+# Neovim
+neovim
+
+# Tools
+age
+stow
+
+# Starship prompt (installed by script)

@@ -1,4 +1,10 @@
+{{- $osid := .chezmoi.os -}}
+{{- if hasKey .chezmoi.osRelease "id" -}}
+{{-   $osid = printf "%s-%s" .chezmoi.os .chezmoi.osRelease.id -}}
+{{- end -}}
 encryption = "age"
 [age]
     identity = "{{ .chezmoi.homeDir }}/.config/chezmoi/key.txt"
-    recipient = "age1avk5mkemytq06tvu7wj0f5u7nmrzy7qj2yd2mg3jhn8n33w2v9xqkatx03"
+
+[data]
+    osid = {{ $osid | quote }}

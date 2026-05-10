@@ -1,18 +1,10 @@
-# OPENSPEC:START
-# OpenSpec shell completions configuration
-fpath=("/Users/aox/.zsh/completions" $fpath)
-autoload -Uz compinit
-compinit
-# OPENSPEC:END
-
 # =============================================================================
 # ZIM + Starship Configuration
 # Pure zsh setup (no shell_profile)
 # =============================================================================
 
-# Initialize Zim Framework
 ZIM_HOME=${ZDOTDIR:-${HOME}}/.zim
-# Download zimfw plugin manager if missing.
+
 if [[ ! -e ${ZIM_HOME}/zimfw.zsh ]]; then
   if (( ${+commands[curl]} )); then
     curl -fsSL --create-dirs -o ${ZIM_HOME}/zimfw.zsh \
@@ -22,11 +14,11 @@ if [[ ! -e ${ZIM_HOME}/zimfw.zsh ]]; then
         https://github.com/zimfw/zimfw/releases/latest/download/zimfw.zsh
   fi
 fi
-# Install missing modules, and update ${ZIM_HOME}/init.zsh if missing or outdated.
+
 if [[ ! ${ZIM_HOME}/init.zsh -nt ${ZIM_CONFIG_FILE:-${ZDOTDIR:-${HOME}}/.zimrc} ]]; then
   source ${ZIM_HOME}/zimfw.zsh init
 fi
-# Initialize modules.
+
 source ${ZIM_HOME}/init.zsh
 
 # =============================================================================
@@ -41,8 +33,10 @@ bindkey '^X^F' fzf-file-widget
 bindkey '^R' fzf-history-widget
 bindkey '^T' fzf-file-widget
 
+{{- if eq .chezmoi.os "darwin" }}
 # Dart completion
 [[ -f $HOME/.dart-cli-completion/zsh-config.zsh ]] && . $HOME/.dart-cli-completion/zsh-config.zsh || true
+{{- end }}
 
 # =============================================================================
 # Keybindings
@@ -77,26 +71,31 @@ compdef wiki=git
 alias ll='ls -lha'
 
 # Editors
-NVIM_PATH='/bin/nvim'
+{{- if eq .chezmoi.os "darwin" }}
+NVIM_PATH='/usr/local/bin/nvim'
+{{- else }}
+NVIM_PATH='/usr/local/bin/nvim'
+{{- end }}
 alias vi=$NVIM_PATH
 alias vim=$NVIM_PATH
 alias vimdiff='$NVIM_PATH -d'
 
 # Utils
 alias calc='qalc'
-alias composer='php /usr/local/bin/composer.phar'
 alias resetlast="git reset --soft 'HEAD^'"
 alias git_use_vim='git config --global core.editor $NVIM_PATH'
 
 # Git
 alias gittree='git log --tags --pretty="%H %d" --decorate=full --graph'
 alias glog='git log --date-order --all --graph --format="%C(green)%h%Creset %C(yellow)%an%Creset %C(blue bold)%ar%Creset %C(red bold)%d %Creset%s"'
-alias conflicts='vim $(git diff --name-only --diff-filter=U | fzf-tmux)'
+alias conflicts='vim $(git diff --name-only --diff-filter=U | fzf)'
 
-# Docker
+{{- if eq .chezmoi.os "darwin" }}
+# Docker (macOS)
 alias dm='docker-machine'
 alias 'dmenvdefault'='eval "$(dm env default)"'
 alias 'dmenvdev'='eval "$(dm env dev)"'
+{{- end }}
 
 # Wiki/Diary
 alias diary='vim -c :VimwikiDiaryIndex'
@@ -110,9 +109,9 @@ alias todo='vim -c "botright Todo"'
 function config(){
   if [[ $# == 0 ]]
   then
-    configfile=$(git --git-dir=$HOME/dotfiles/ ls-tree -r master --name-only | fzf-tmux --height 40% --layout=reverse | xargs -I {} echo "$HOME/"/{})
+    configfile=$(git --git-dir=$HOME/dotfiles/ ls-tree -r master --name-only | fzf --height 40% --layout=reverse | xargs -I {} echo "$HOME/"/{})
     if [ ! -z ${configfile} ]
-    then 
+    then
       vim $configfile
     fi
   else
@@ -169,7 +168,7 @@ function git-remote-url(){
 }
 
 function git-branch-select(){
-  git branch | fzf-tmux -q '*' | cut -c3-
+  git branch | fzf -q '*' | cut -c3-
 }
 
 function git-current-branch(){
@@ -177,7 +176,7 @@ function git-current-branch(){
 }
 
 function git-remote-select(){
-  git remote | fzf-tmux --select-1
+  git remote | fzf --select-1
 }
 
 # Find grep
@@ -234,22 +233,13 @@ function command_result (){
     fi
 }
 
-# Finder cd
-cdf() {
-  target=`osascript -e 'tell application "Finder" to if (count of Finder windows) > 0 then get POSIX path of (target of front Finder window as text)'`
-  if [ "$target" != "" ]; then
-    cd "$target"; pwd
-  else
-    echo 'No Finder window found' >&2
-  fi
-}
-
 # Diff sorted
 function diffs() {
     diff  <(sort $1) <(sort $2)
 }
 
-# k3d config
+{{- if eq .chezmoi.os "darwin" }}
+# k3d config (macOS/rancher-desktop)
 function k3dconfigwall(){
   k3d cluster list --no-headers -o string | cut -d' ' -f1 | xargs k3d kubeconfig write
 }
@@ -259,11 +249,7 @@ function kubeconfigRefresh() {
   export KUBECONFIG=$(find "$HOME/.kube" "$HOME/.config/k3d" -name "config*" -o -name "kubeconfig*" | awk '{printf "%s:", $0} END {print ""}')
 }
 kubeconfigRefresh
-
-# Brew
-function brew-list-sizes(){
-  du -sch $(brew --cellar)/*/* | sed "s|$(brew --cellar)/\([^/]*\)/.*|\1|" | sort -k1h
-}
+{{- end }}
 
 # Dev builds
 function list-dev-builds(){
@@ -284,12 +270,26 @@ function randmac() {
 # Lazy Loaded Tools
 # =============================================================================
 
-# NVM (Node Version Manager)
-nvm() {
-  unset -f nvm
-  [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-  nvm "$@"
+# FNM (Node Version Manager)
+{{- if eq .chezmoi.os "darwin" }}
+fnm() {
+  unset -f fnm
+  # Add FNM to PATH if not already present
+  [[ ":$PATH:" != *":$FNM_DIR:"* ]] && export PATH="$FNM_DIR:$PATH"
+  # Initialize FNM shell environment
+  eval "$(fnm env)" 2>/dev/null
+  fnm "$@"
 }
+{{- else }}
+fnm() {
+  unset -f fnm
+  # Add FNM to PATH if not already present
+  [[ ":$PATH:" != *":$FNM_DIR:"* ]] && export PATH="$FNM_DIR:$PATH"
+  # Initialize FNM shell environment
+  eval "$(fnm env)" 2>/dev/null
+  fnm "$@"
+}
+{{- end }}
 
 # SDKMAN (Java/Rust toolchain manager)
 sdk() {
@@ -306,26 +306,3 @@ sdk() {
 set -o vi
 set +o noclobber
 bindkey "^[[C" fzf-cd-widget
-
-# bun completions
-[ -s "/Users/aox/.bun/_bun" ] && source "/Users/aox/.bun/_bun"
-
-# bun
-export BUN_INSTALL="$HOME/.bun"
-export PATH="$BUN_INSTALL/bin:$PATH"
-
-# bun
-export BUN_INSTALL="$HOME/.bun"
-export PATH="$BUN_INSTALL/bin:$PATH"
-
-# PAI alias
-alias pai='bun /Users/aox/.claude/PAI/Tools/pai.ts'
-
-alias claude-mem='bun "/Users/aox/.claude/plugins/marketplaces/thedotmack/plugin/scripts/worker-service.cjs"'
-
-# Added by Antigravity
-export PATH="/Users/aox/.antigravity/antigravity/bin:$PATH"
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
-
-# opencode
-export PATH=/root/.opencode/bin:$PATH

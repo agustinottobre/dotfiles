@@ -1,53 +1,61 @@
+#!/usr/bin/env zsh
 # =============================================================================
-# Zsh Environment - sourced for all shell types (login/non-login, interactive/non-interactive)
+# Zsh Environment - sourced for all shell types
 # =============================================================================
 
-# Ensure that a non-login, non-interactive shell has a defined environment.
-if [[ ( "$SHLVL" -eq 1 && ! -o LOGIN ) && -s "${ZDOTDIR:-$HOME}/.zprofile" ]]; then
-  source "${ZDOTDIR:-$HOME}/.zprofile"
-fi
-
-# Cargo/Rust - sourced for all shell types
-[ -s "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
+# Cargo/Rust - auto-injected by ~/.cargo/env on most systems
+# [ -s "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
 
 # =============================================================================
 # PATH additions for all shell types
 # =============================================================================
 
-# Go
-#export GOPATH=$HOME/Dev
-#export GOROOT="$(brew --prefix golang)/libexec"
-#export GOPROXY=https://proxy.golang.org,direct
-#export GOSUMDB="sum.golang.org"
-#export PATH=$PATH:$GOPATH/bin:$GOROOT/bin
-
-# Tools
+# Tools (Linux: ~/.local/bin is standard for user-installed binaries)
+{{- if eq .chezmoi.os "darwin" }}
 export PATH=$PATH:$HOME/Tools/bin
-export PATH=$PATH:$HOME/Tools/STM32Toolchain/gcc-arm/bin
-export PATH=$PATH:/usr/local/opt/mysql@5.7/bin
-export PATH=$PATH:$HOME/bin/gs-venv/bin
-export PATH=$PATH:$HOME/.local/bin/lvim
+{{- end }}
+export PATH=$PATH:$HOME/.local/bin
 
-# pipx
-export PATH="$PATH:$HOME/.local/bin"
-
-# Dart/Flutter
+{{- if eq .chezmoi.os "darwin" }}
+# Dart/Flutter (macOS)
 export PATH="$PATH":"$HOME/.pub-cache/bin"
+{{- end }}
 
-# Android
-export ANDROID_HOME=$HOME/Library/Android/sdk/
-export PATH=$PATH:$ANDROID_HOME/platform-tools
-export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
-export PATH=$PATH:$ANDROID_HOME/emulator
-
-# Rancher
-export PATH=$PATH:$HOME/.rd/bin
-
-# NVM (lazy loaded in .zshrc, but NVM_DIR must be set here)
-export NVM_DIR="$HOME/.nvm"
+# NVM/FNM (lazy loaded in .zshrc, but NVM_DIR/FNM_DIR must be set here)
+{{- if eq .chezmoi.os "darwin" }}
+export FNM_DIR="$HOME/.fnm"
+export PATH=$PATH:$FNM_DIR
+{{- else }}
+export FNM_DIR="$HOME/.fnm"
+export PATH=$PATH:$FNM_DIR
+# Add Node binaries to PATH (fnm - all installed versions)
+if [ -d "$FNM_DIR/node-versions" ]; then
+  for dir in "$FNM_DIR/node-versions"/*/installation/bin; do
+    [ -d "$dir" ] && export PATH="$PATH:$dir"
+  done
+fi
+{{- end }}
 
 # zsh functions path
-export FPATH="/usr/local/share/zsh/site-functions:$FPATH"
+# /usr/local/share/zsh/site-functions is already in the default fpath on both
+# macOS (Homebrew) and Debian. Only prepend if it's missing (e.g., custom builds).
+(( ${fpath[(I)/usr/local/share/zsh/site-functions]} )) || fpath=(/usr/local/share/zsh/site-functions ${fpath})
 
+{{- if eq .chezmoi.os "darwin" }}
 # Homebrew
 export HOMEBREW_NO_GITHUB_API=1
+{{- end }}
+
+# Go
+{{- if eq .chezmoi.os "darwin" }}
+export GOPATH=$HOME/Dev
+export GOROOT="$(brew --prefix golang)/libexec"
+export GOPROXY=https://proxy.golang.org,direct
+export GOSUMDB="sum.golang.org"
+export PATH=$PATH:$GOPATH/bin:$GOROOT/bin
+{{- else }}
+export GOPATH=$HOME/Dev
+export GOPROXY=https://proxy.golang.org,direct
+export GOSUMDB="sum.golang.org"
+export PATH=$PATH:$GOPATH/bin
+{{- end }}

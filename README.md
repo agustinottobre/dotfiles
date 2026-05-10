@@ -1,61 +1,97 @@
-# Dotfiles Management
+# Dotfiles
 
-Modern, profile-based dotfiles management for macOS workstations and headless Linux servers.
+Cross-platform dotfiles managed with [chezmoi](https://www.chezmoi.io/). Works on **macOS** and **Linux (Debian-based)**.
 
-## 🚀 TL;DR / Quick Start
+## Quick Start
 
-**New Machine Setup:**
 ```bash
-git clone git@bitbucket.org:agustinottobre/dotfiles.git ~/dotfiles
+git clone <your-repo> ~/dotfiles
 cd ~/dotfiles && ./bootstrap.sh
+source ~/.zshrc
 ```
 
-**Daily Workflow:**
-*   `config` - Fuzzy find and edit any dotfile.
-*   `secrets decrypt` - Bring in your sensitive keys (in-memory).
-*   `secrets encrypt` - Save changes back to encrypted `.sops` files.
-*   `secrets cleanup` - **Securely wipe** raw secrets before logging out.
-*   `secrets add <file>` - Protect a new file with encryption.
+## What's Included
 
----
+| Component | Description |
+|-----------|-------------|
+| **Zsh + Zim** | Fast shell with zimfw framework, syntax highlighting, autosuggestions, history search |
+| **Starship** | Cross-shell prompt with git, node, kubernetes info |
+| **Tmux** | Terminal multiplexer with vi mode, smart pane switching, TPM plugins |
+| **Neovim** | Configured with Kickstart.nvim + Tokyo Night theme, LSP, Telescope |
+| **FZF** | Fuzzy finder for files, git, history |
+| **FNM** | Fast Node Manager (replaces NVM) |
 
-## 🛠 Features
+## Repository Structure
 
-### 1. Profile-Based Bootstrap
-The `bootstrap.sh` script detects your OS and lets you choose:
-*   **`mac-full`**: Complete workstation setup (Brew, Rust, GUI configs).
-*   **`server-headless`**: Minimal CLI setup (Zsh, Tmux, Neovim Nightly AppImage).
-    *   *Visual indicator*: Remote servers get a **Red** Tmux status bar automatically.
+```
+dotfiles/
+├── bootstrap.sh                  # Main setup entry point
+├── packages/
+│   ├── apt.txt                # Debian packages
+│   └── brew.txt               # macOS packages
+├── dot_zshrc.tmpl             # Zsh config (Zim + FZF + aliases)
+├── dot_zshenv.tmpl            # Environment variables
+├── dot_zprofile.tmpl          # Login shell setup
+├── dot_zimrc.tmpl             # Zim framework modules
+├── dot_tmux.conf.tmpl        # Tmux configuration
+├── dot_config/
+│   ├── nvim/                  # Neovim (Kickstart + Tokyo Night)
+│   └── starship.toml          # Starship prompt
+└── bin/                       # Utility scripts
+```
 
-### 2. Secure Secret Management (SOPS + age)
-Sensitive files (like `.ssh/config`) are stored encrypted as `*.sops.*` files.
-*   **No local keys required**: Decrypt secrets into memory for a session and wipe them when done.
-*   **Public Key Persistence**: Your public key is saved to `~/.dotfiles_public_key` so encryption is automated.
-*   **Automatic Symlinking**: Any file you protect with `secrets add` is automatically symlinked during bootstrap.
+## Daily Workflow
 
-### 3. Verification & Safety
-Run the built-in tests whenever you modify the structure:
 ```bash
-./tests/verify_configs.sh
+# Edit any dotfile
+config                          # Fuzzy find dotfiles in repo
+config status                   # Check changes
+config add <file>               # Add new file to chezmoi
+config diff                     # Review changes
+config update                   # Pull latest from repo
+
+# Within chezmoi source directory
+chezmoi apply                  # Apply dotfiles to home
+chezmoi update                 # Update from repo
 ```
-This checks syntax across all scripts and ensures core paths and profile logic are intact.
 
-## 📁 Repository Structure
+## OS-Specific Behavior
 
-*   `.config/` - App-specific configs (nvim, starship, alacritty, etc.).
-*   `.ssh/` - SSH configurations (encrypted via SOPS).
-*   `bin/` - Custom utility scripts.
-*   `bootstrap.sh` - The unified entry point for setup.
-*   `tests/` - Verification suite for maintenance.
+The dotfiles automatically adapt to your OS:
 
----
+- **macOS**: Includes Docker aliases, k3d, Dart, Android SDK paths, Homebrew env
+- **Linux**: Uses apt packages, Linux-specific Go paths, xsel clipboard
 
-## 🔒 Secrets Setup (One-time)
-If you are moving a file to the encrypted flow for the first time:
-1.  Generate a key: `age-keygen -o ~/.config/sops/age/keys.txt`
-2.  Add the secret: `secrets add .ssh/id_rsa`
-3.  The file is now ignored by Git in its raw form and tracked as `.ssh/id_rsa.sops`.
+## Dependencies
 
----
-*Old IntelliJ settings are available in `Intellij_settings.zip`.*
-*Iterm theme is available in `themes/gruvbox_dark_hard_AOX.itermcolors`.*
+### Installed Automatically
+- `zsh`, `tmux`, `git`, `fzf`, `ripgrep` (via apt/brew)
+- `starship`, `fnm`, `neovim` (via install script)
+
+### Pre-installed Required
+- `curl` or `wget`
+- `chezmoi`
+
+## Troubleshooting
+
+### Shell not loading
+```bash
+exec zsh           # Restart zsh
+source ~/.zshenv  # Source manually
+```
+
+### Neovim plugins not loading
+```bash
+nvim --headless +Lazy\ sync +quit  # Force sync plugins
+```
+
+### Tmux plugins missing
+```bash
+prefix + I        # Inside tmux, install plugins
+```
+
+### FZF not working
+```bash
+$(brew --prefix)/opt/fzf/install  # macOS
+~/.fzf/install                    # Linux
+```
