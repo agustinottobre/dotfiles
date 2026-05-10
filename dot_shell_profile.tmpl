@@ -360,10 +360,6 @@ function kube_ps1_autohide() {
   }
 kubeconfigRefresh
 
-#Use zsh site-funrctions completion from brew zsh installation over default 
-export FPATH="/usr/local/share/zsh/site-functions:$FPATH"
-#source $HOME/.rvm/scripts/rvm
-
 # SDKMAN - LAZY LOADED (moved to end of file)
 # Disabled for faster shell startup. Use 'sdk' command to load on demand.
 # To enable: remove the comment below

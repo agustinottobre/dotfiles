@@ -64,6 +64,13 @@ chezmoi init --source "$REPO_DIR" --force
 info "Applying dotfiles..."
 chezmoi apply --source "$REPO_DIR" --force --dry-run=false
 
+if [ "$OS" != "darwin" ]; then
+  if [ -x /usr/bin/zsh ] && [ "$(getent passwd root | cut -d: -f7)" != "/usr/bin/zsh" ]; then
+    info "Setting zsh as default shell..."
+    chsh -s /usr/bin/zsh 2>/dev/null || warn "Could not change default shell. Run manually: chsh -s /usr/bin/zsh"
+  fi
+fi
+
 echo ""
 echo "============================================"
 echo "  Bootstrap Complete!"
