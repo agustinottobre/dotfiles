@@ -1,0 +1,25 @@
+# =============================================================================
+# SSH Private Key — ENCRYPTED
+# =============================================================================
+# ENCRYPTED FILE — managed by chezmoi with age encryption.
+#
+# ⚠️  THIS IS A PLACEHOLDER — REPLACE WITH YOUR ACTUAL PRIVATE KEY.
+#
+# ⚠️  KEY ROTATION:
+#    1. On your LOCAL machine (where you have the unencrypted key):
+#       chezmoi encrypt ~/.ssh/hostinger_id_rsa > dotfiles/private_dot_ssh/hostinger_id_rsa.age
+#    2. Commit the new .age file to your dotfiles repo
+#    3. Old encrypted key is now invalid — remove from repo history if needed
+#
+# ⚠️  IF THE KEY IS COMPROMISED:
+#    1. Generate new key: ssh-keygen -t ed25519 -f ~/.ssh/hostinger_id_rsa -C "hostinger"
+#    2. Add new public key to Hostinger dashboard
+#    3. Encrypt new private key with chezmoi
+#    4. Commit new .age, remove old one from repo
+#
+# =============================================================================
+# ADD YOUR PRIVATE KEY BELOW — REPLACE EVERYTHING AFTER THIS LINE
+# =============================================================================
+# -----BEGIN OPENSSH PRIVATE KEY-----
+# [Your actual private key content goes here — replace this entire block]
+# -----END OPENSSH PRIVATE KEY-----

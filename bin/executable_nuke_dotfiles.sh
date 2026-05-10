@@ -25,7 +25,7 @@ if [[ $confirm == [yY] || $confirm == [yY][eE][sS] ]]; then
             rm -rf "$path"
         fi
     done
-    success "Sensitive data wiped successfully."
+    echo "Done. All sensitive data wiped."
 else
     echo "Aborted."
 fi

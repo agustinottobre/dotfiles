@@ -1,0 +1,18 @@
+# =============================================================================
+# SSH Private Key — ENCRYPTED
+# =============================================================================
+# ENCRYPTED FILE — managed by chezmoi with age encryption.
+#
+# ⚠️  THIS IS A PLACEHOLDER — REPLACE WITH YOUR ACTUAL PRIVATE KEY.
+#
+# ⚠️  KEY ROTATION:
+#    1. On your LOCAL machine: chezmoi encrypt ~/.ssh/linksys_wrt3200acm_id > dotfiles/private_dot_ssh/linksys_wrt3200acm_id.age
+#    2. Commit the new .age file
+#    3. Remove old key from repo history if needed
+#
+# ⚠️  IF COMPROMISED: Generate new key, update router, re-encrypt, commit.
+#
+# =============================================================================
+# -----BEGIN OPENSSH PRIVATE KEY-----
+# [Replace with your actual linksys router SSH key]
+# -----END OPENSSH PRIVATE KEY-----

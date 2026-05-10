@@ -1,1 +1,18 @@
-# Encrypted SSH Key Placeholder
+# =============================================================================
+# DEPRECATED — Use the named key files instead
+# =============================================================================
+#
+# This file is kept for backward compatibility only.
+#
+# Use these files instead (they have rotation instructions embedded):
+#   private_dot_ssh/github_id_rsa.age        — GitHub
+#   private_dot_ssh/bitbucket_id_rsa.age     — Bitbucket
+#   private_dot_ssh/tower_id_rsa.age         — Proxmox tower
+#   private_dot_ssh/hostinger_id_rsa.age     — Hostinger VPS
+#   private_dot_ssh/solarbox_id_rsa.age      — Solarbox web server
+#   private_dot_ssh/alwaysdata_id_ed25519.age — alwaysdata.net
+#   private_dot_ssh/linksys_wrt3200acm_id.age — Router
+#
+# See DOCS/ROTATION.md for key rotation instructions.
+# See DOCS/SECRETS.md for the daily workflow.
+# =============================================================================

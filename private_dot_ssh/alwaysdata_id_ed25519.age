@@ -1,0 +1,18 @@
+# =============================================================================
+# SSH Private Key — ENCRYPTED
+# =============================================================================
+# ENCRYPTED FILE — managed by chezmoi with age encryption.
+#
+# ⚠️  THIS IS A PLACEHOLDER — REPLACE WITH YOUR ACTUAL PRIVATE KEY.
+#
+# ⚠️  KEY ROTATION:
+#    1. On your LOCAL machine: chezmoi encrypt ~/.ssh/alwaysdata_id_ed25519 > dotfiles/private_dot_ssh/alwaysdata_id_ed25519.age
+#    2. Commit the new .age file
+#    3. Remove old key from repo history if needed
+#
+# ⚠️  IF COMPROMISED: Generate new key, update remote server, re-encrypt, commit.
+#
+# =============================================================================
+# -----BEGIN OPENSSH PRIVATE KEY-----
+# [Replace with your actual alwaysdata private key]
+# -----END OPENSSH PRIVATE KEY-----

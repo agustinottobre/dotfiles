@@ -1,0 +1,27 @@
+# =============================================================================
+# SSH Private Key — ENCRYPTED
+# =============================================================================
+# ENCRYPTED FILE — managed by chezmoi with age encryption.
+#
+# ⚠️  THIS IS A PLACEHOLDER — REPLACE WITH YOUR ACTUAL PRIVATE KEY.
+#
+# ⚠️  KEY ROTATION:
+#    1. On your LOCAL machine (where you have the unencrypted key):
+#       chezmoi encrypt ~/.ssh/<keyfile> > dotfiles/private_dot_ssh/<keyfile>.age
+#    2. Commit the new .age file to your dotfiles repo
+#    3. Old encrypted key is now invalid — remove it from repo history if needed:
+#       git filter-branch --index-filter 'git rm --cached --ignore-unmatch <file>' HEAD
+#
+# ⚠️  IF THE KEY IS COMPROMISED:
+#    1. Generate a new key: ssh-keygen -t ed25519 -f ~/.ssh/<keyfile> -C "comment"
+#    2. Add the new public key to the remote server
+#    3. Encrypt the new private key with chezmoi (step 1 above)
+#    4. Commit the new .age file
+#    5. Remove the old .age file from the repo
+#
+# =============================================================================
+# ADD YOUR PRIVATE KEY BELOW — REPLACE EVERYTHING AFTER THIS LINE
+# =============================================================================
+# -----BEGIN OPENSSH PRIVATE KEY-----
+# [Your actual private key content goes here — replace this entire block]
+# -----END OPENSSH PRIVATE KEY-----

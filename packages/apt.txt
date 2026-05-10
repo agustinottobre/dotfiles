@@ -11,7 +11,9 @@ unzip
 fzf
 
 # Neovim - installed via AppImage in install script
-# age  # for chezmoi encryption
+
+# Age encryption - for chezmoi secrets encryption
+age
 
 # Starship prompt (installed by script)
 
