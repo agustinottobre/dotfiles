@@ -122,7 +122,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/github_id_rsa -C "agustinottobre@gmail.com"
 
 ```bash
 # On your LOCAL machine (where the new private key lives):
-chezmoi encrypt ~/.ssh/github_id_rsa > ~/dotfiles/private_dot_ssh/github_id_rsa.age
+chezmoi add --encrypt ~/.ssh/github_id_rsa
 
 # Commit and push
 cd ~/dotfiles
@@ -156,7 +156,7 @@ chezmoi edit ~/.ssh/config
 #   IdentityFile ~/.ssh/new_service_id_rsa
 
 # Encrypt and add to repo
-chezmoi encrypt ~/.ssh/new_service_id_rsa > private_dot_ssh/new_service_id_rsa.age
+chezmoi add --encrypt ~/.ssh/new_service_id_rsa
 ```
 
 ### Step 3.2 — Commit

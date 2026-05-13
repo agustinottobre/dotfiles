@@ -37,7 +37,7 @@ chezmoi edit ~/.ssh/config
 # Add a new secret
 # 1. Put the unencrypted file on your local machine
 # 2. Encrypt it:
-chezmoi encrypt ~/.ssh/my_key > private_dot_ssh/my_key.age
+chezmoi add --encrypt ~/.ssh/my_key
 # 3. Commit
 git add private_dot_ssh/my_key.age
 git commit -m "add: my_key SSH key"
@@ -95,7 +95,7 @@ Quick summary:
 ssh-keygen -t ed25519 -f ~/.ssh/github_id_rsa -C "agustinottobre@gmail.com"
 # 2. Update remote (GitHub settings → SSH keys)
 # 3. Re-encrypt to dotfiles
-chezmoi encrypt ~/.ssh/github_id_rsa > private_dot_ssh/github_id_rsa.age
+chezmoi add --encrypt ~/.ssh/github_id_rsa
 # 4. Commit and push
 git add private_dot_ssh/github_id_rsa.age && git commit -m "rotate: github key" && git push
 ```
