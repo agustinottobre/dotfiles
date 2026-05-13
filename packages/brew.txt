@@ -7,8 +7,8 @@ tmux
 
 # Node.js via FNM (installed by script)
 
-# Neovim
-neovim
+# Neovim — installed via install_neovim_darwin() (latest stable tarball)
+# Do NOT add neovim here; brew's version lags behind releases
 
 # Tools
 age
