@@ -1,5 +1,12 @@
 "$schema" = 'https://starship.rs/config-schema.json'
 
+# Increase timeout for slow/network filesystems
+scan_timeout = 200
+
+# Main prompt format: [username][hostname][shlvl][sudo][vim_status][directory][git_branch][git_status][python][nodejs][rust][golang][package][character]
+format = """
+$username$hostname$shlvl$sudovimstatdirectory$git_branch$git_status$python$nodejs$rust$golang$package$character"""
+
 continuation_prompt = "[.](bright-black) "
 
 
@@ -83,6 +90,8 @@ symbol = ".NET "
 
 [directory]
 read_only = " ro"
+truncation_symbol = "…/"
+home_symbol = "~"
 
 [docker_context]
 symbol = "docker "
@@ -110,7 +119,7 @@ truncation_symbol = "..."
 symbol = "gcp "
 
 [git_branch]
-symbol = "git "
+symbol = ""
 truncation_symbol = "..."
 
 [gleam]
@@ -162,7 +171,7 @@ symbol = "kubernetes "
 symbol = "lua "
 
 [nodejs]
-symbol = "nodejs "
+symbol = "node "
 
 [memory_usage]
 symbol = "memory "
