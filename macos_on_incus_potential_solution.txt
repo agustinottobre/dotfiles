@@ -74,6 +74,80 @@ incus start macos-test --console
 BLOCKER: macOS recovery boots to GUI. Must interactively select Disk Utility
 → format virtual disk → install macOS. No known headless automation exists.
 
+### Why the installer blocks automation (detailed explanation)
+
+The macOS recovery environment boots to a graphical interface. The workflow it
+demands is:
+
+  1. Select language → Continue
+  2. Open Disk Utility from menu bar
+  3. Select the virtual disk → Erase (format as APFS)
+  4. Close Disk Utility
+  5. Select "Install macOS" → Continue → Agree to license
+  6. Select the formatted disk → Install
+  7. Wait ~30-60 min for installation
+  8. Post-install: setup assistant (language, keyboard, Apple ID, etc.)
+
+Every step requires mouse clicks and/or keyboard input. There is no:
+  - --headless flag
+  - Kickstart file (like Red Hat's)
+  - autounattend.xml equivalent (like Windows)
+  - startosinstall binary (only exists on already-installed macOS, not recovery)
+  - netboot/netinstall automation
+  - Apple MDM/DEP enrollment at recovery stage (only post-install)
+
+Apple never built an unattended macOS installer because:
+  - macOS is designed for Apple hardware, which always has a screen.
+  - macOS Server was discontinued in 2022.
+  - Apple's CI infrastructure uses bare-metal Macs with MDM, not VMs.
+
+### Can this be solved? (three avenues, none complete)
+
+1. Automated VNC macro scripting
+   Write a script that sends synthesized mouse clicks and keyboard events to
+   the QEMU VNC session, walking through Disk Utility programmatically.
+   - Technically possible with tools like xdotool or Python's pyautogui.
+   - Brittle: Apple changes installer UI between macOS versions.
+   - VNC latency makes timing unreliable.
+   - Not a real solution, just a fragile workaround.
+
+2. Pre-installed golden image
+   One person does the interactive install once, then distributes the VM disk
+   image. Others clone and use directly.
+   - Technically trivial (incus snapshot → incus publish → incus launch).
+   - Legal: Apple's EULA prohibits distributing macOS VMs.
+   - Practical: 25+ GB image, hardware-specific serial numbers (iMessage, etc).
+   - Hackintosh community does this informally but not for CI.
+
+3. Apple provides headless install
+   Not happening. Apple has shown zero interest in headless/server macOS
+   since discontinuing macOS Server. The Silicon transition made VMs
+   (Virtualization.framework) a first-class feature on Mac hardware, not
+   a cross-platform server feature.
+
+### What this means: the CI pipeline that's ALMOST possible
+
+  ┌──────────────────────────────────────────┐
+  │  Incus macOS VM pipeline                 │
+  │                                          │
+  │  firmware ✅ → image ✅ → convert ✅     │
+  │                          ↓               │
+  │              VM boots to...              │
+  │           ┌──────────────────┐           │
+  │           │  GUI INSTALLER    │           │
+  │           │  (needs human)   │           │
+  │           │  Disk Utility →  │           │
+  │           │  Erase → Install │           │
+  │           └──────────────────┘           │
+  │                    ↓                     │
+  │           Once installed ONCE:           │
+  │           snapshot → clone → CI ✅       │
+  └──────────────────────────────────────────┘
+
+After that one-time VNC session, you could snapshot the installed VM and use it
+for CI indefinitely (clone, run tests, destroy). The blocker is purely the
+initial install — 30 minutes of clicking through a GUI, once.
+
 ### What Works as Alternatives (Today)
 
 1. **Docker-OSX** — docker pull sickcodes/docker-osx:auto
