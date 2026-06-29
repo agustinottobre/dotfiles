@@ -644,3 +644,97 @@ incus config set macos-test boot.autostart true
 Use code with caution.
 AI responses may include mistakes. Learn more
 
+
+══════════════════════════════════════════════════════════════════
+ADDENDUM: OpenCore Disk Creation — The Missing Step (2026-06-29)
+══════════════════════════════════════════════════════════════════
+
+## Critical Finding
+
+The macOS recovery image boots from a raw HFS+ partition, which QEMU's OVMF
+UEFI firmware cannot natively boot. OpenCore is required to chain-boot it.
+
+Building a working OpenCore disk from scratch is error-prone. The config.plist
+must be a FULL, validated OpenCore configuration (not minimal). Missing sections,
+wrong file paths, case issues, or missing drivers all cause "OC: Failed to
+load configuration!"
+
+## Working Recipe: Use OSX-KVM's Pre-Tested OpenCore
+
+The OSX-KVM project distributes a complete, validated OpenCore configuration:
+
+```bash
+# Clone OSX-KVM
+git clone --depth 1 https://github.com/kholia/OSX-KVM /tmp/OSX-KVM
+
+# OSX-KVM OpenCore structure:
+#   OpenCore/
+#     config.plist          ← working config (34KB)
+#     EFI/OC/Drivers/       ← OpenHfsPlus, OpenRuntime, OpenCanopy, etc.
+#     EFI/OC/Kexts/         ← AppleALC, AGPMInjector, etc.
+#     EFI/OC/ACPI/          ← SSDT-DTGP.aml, SSDT-EC.aml, etc.
+#     EFI/OC/Resources/     ← Icons for boot picker GUI
+
+# Create GPT disk with FAT32 ESP
+dd if=/dev/zero of=/tmp/opencore-osxkvm.img bs=1M count=50
+parted -s /tmp/opencore-osxkvm.img mklabel gpt
+parted -s /tmp/opencore-osxkvm.img mkpart primary fat32 1MiB 100%
+parted -s /tmp/opencore-osxkvm.img set 1 esp on
+
+LOOP=$(losetup --find --show -P /tmp/opencore-osxkvm.img)
+mkfs.vfat -F 32 "${LOOP}p1"
+mkdir -p /tmp/oc
+mount "${LOOP}p1" /tmp/oc
+
+# Copy OSX-KVM's entire OpenCore directory
+cp -a /tmp/OSX-KVM/OpenCore/EFI /tmp/oc/
+cp /tmp/OSX-KVM/OpenCore/config.plist /tmp/oc/EFI/OC/config.plist
+
+# Ensure BOOTx64.efi exists (UEFI entry point)
+mkdir -p /tmp/oc/EFI/BOOT
+cp /tmp/orchard/audk/Build/OpenCorePkg/RELEASE_GCC/X64/OpenCore.efi \
+   /tmp/oc/EFI/BOOT/BOOTx64.efi
+
+umount /tmp/oc
+rmdir /tmp/oc
+losetup -d "$LOOP"
+```
+
+## Final Working VM Recipe (Complete)
+
+```bash
+# Profile (one-time)
+incus profile create macos-minimal 2>/dev/null || true
+incus profile device add macos-minimal root disk pool=default path=/ 2>/dev/null || true
+incus profile set macos-minimal security.secureboot=false
+
+# Storage volumes
+incus storage volume create default macos-system size=60GiB
+
+# Create VM
+incus init macos-test --vm --empty -p macos-minimal -c image.os=macOS
+incus config device add macos-test root disk pool=default source=macos-system
+incus config device add macos-test recovery disk \
+  source=/tmp/macos-recovery/BaseSystem.img
+incus config device add macos-test opencore disk \
+  source=/tmp/opencore-osxkvm.img boot.priority=15
+incus config set macos-test raw.qemu="-global ICH9-LPC.acpi-pci-hotplug-with-bridge-support=off"
+
+# Boot
+incus start macos-test
+# → Incus web GUI → macos-test → Console → VGA
+# → OpenCore boot picker appears
+# → Select macOS recovery volume
+# → Recovery environment boots to GUI
+```
+
+## Lessons Learned
+
+1. **OpenCore config must be complete** — minimal configs fail. Use OSX-KVM's.
+2. **GPT partition required** — UEFI needs ESP partition, not raw FAT32.
+3. **Drivers must match config** — config.plist references exact driver paths.
+4. **Case matters** — FAT32 is case-insensitive but OpenCore may not be.
+5. **OpenCore.efi as BOOTx64.efi** — UEFI boots from /EFI/BOOT/BOOTx64.efi.
+6. **PCI hotplug disabled** — macOS doesn't support it.
+7. **image.os=macOS** — required by orchard scriptlet (if used).
+
