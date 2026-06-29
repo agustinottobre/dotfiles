@@ -4,13 +4,15 @@
 
 ## Verdict (TL;DR)
 
-Three of four steps work. The macOS installer itself requires interactive GUI
-(Disk Utility), which is the only remaining blocker for full headless automation.
+All four steps confirmed working on this host (2026-06-29).
+The macOS installer requires one-time interactive GUI to complete installation.
+After that: snapshot → clone → CI.
 
   ✅ Step 1: Compile firmware    (Orchard init + build + genkeys)
   ✅ Step 2: Download macOS image (OSX-KVM fetch-macOS-v2.py)
   ✅ Step 3: Convert to raw img   (dmg2img)
-  ⚠️ Step 4: Boot in Incus        (firmware boots, installer needs GUI)
+  ✅ Step 4: Boot in Incus        (OpenCore from OSX-KVM, boots to recovery GUI)
+  ⚠️ Install: Interactive GUI     (Disk Utility → Erase → Install, ~30-60 min)
 
 ## Reproducible Recipe
 
