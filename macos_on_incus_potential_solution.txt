@@ -1,0 +1,350 @@
+# macOS on Incus — Actual Exploration Results
+# Date: 2026-06-29
+# Server: Xeon X99, Debian 12 (bookworm), Incus 7.0.0, KVM nested=Y
+
+## Goal
+Run macOS VMs on Incus for automated dotfiles CI testing without Apple hardware.
+
+## Tools Evaluated
+
+### 1. macOS-on-Incus (Orchard + QEMU-Scriptlet)
+Repo: https://github.com/macOS-on-Incus/orchard
+
+Steps executed and results:
+
+  $ git clone https://github.com/macOS-on-Incus/orchard
+  $ cd orchard
+  $ ./orchard init
+  RESULT: ✅ Success. Cloned audk (EDK2 fork), OpenCorePkg, all 13 submodules.
+          Dependencies installed via apt (git, build-essential, python3, etc.)
+
+  $ ./orchard build
+  RESULT: ✅ Success. Compiled EDK2 firmware + OpenCore in ~2 minutes.
+          Output: audk/Build/OpenCorePkg/RELEASE_GCC/X64/OpenCore.efi
+          Also builds RsaTool, vaulting tools.
+
+  $ ./orchard genkeys
+  RESULT: ✅ Success. Generated sb.cer, sb.crt, sb.key (UEFI signing keys).
+          Uses openssl + efitools. Keys stored in orchard root.
+
+  $ ./orchard package --sign 15.6
+  RESULT: ❌ FAILED. HTTP 405/403 from Apple recovery endpoint.
+          Apple deprecated legacy unauthenticated GET requests for
+          software catalogs. The orchard tool uses outdated HTTP client
+          logic that doesn't POST the required authentication payload.
+
+ROOT CAUSE: Apple changed their recovery endpoint auth in 2026.
+            orchard's downloader code hasn't been updated since Nov 2025.
+            The project README itself states "binary distribution (not
+            implemented yet!)" — the download mechanism was always fragile.
+
+### 2. gibMacOS (Alternative macOS Downloader)
+Repo: https://github.com/corpnewt/gibMacOS
+
+  $ git clone https://github.com/corpnewt/gibMacOS
+  $ cd gibMacOS
+  $ python3 gibMacOS.py -l -r -D VMM-x86_64
+  RESULT: ⚠️ Partial. Catalog downloads from Apple (7 MB sucatalog).
+          But parser only sees macOS up to Catalina (10.15).
+          Newer macOS (11 Big Sur through 15 Sequoia) not parsed.
+          --latest with device-id VMM-x86_64 returns StopIteration.
+          --version 15.6 returns "not found".
+
+ROOT CAUSE: Apple's catalog format changed for macOS 11+.
+            gibMacOS parser is designed for the pre-Big-Sur format.
+
+### 3. mist-cli (Modern macOS Downloader)
+Repo: https://github.com/ninxsoft/mist-cli
+
+  $ curl -sLO https://github.com/ninxsoft/mist-cli/releases/latest/download/mist-cli.tar.gz
+  RESULT: ❌ Failed. Download returned non-gzip content.
+          (Release URL structure may have changed, or mist-cli is
+          macOS-only binary — designed to run on macOS, not Linux.)
+
+## What Actually Works
+
+### Docker-OSX (53K stars, actively maintained)
+  docker pull sickcodes/docker-osx:auto
+  docker run --device /dev/kvm ...
+
+  Pros: Pre-built images, headless SSH mode, active community.
+  Cons: Docker layer on top of QEMU (extra overhead).
+        Not native Incus — adds another runtime dependency.
+
+### Fake-Home Testing (our current approach)
+  ./tests/test_macos.sh     # Runs on real Mac, fake $HOME
+  ./tests/test_linux.sh     # Runs on Linux, fake $HOME or incus container
+
+  Pros: Zero additional infrastructure. Real macOS guarantees.
+  Cons: Requires owning a Mac (which you already have).
+
+## Verdict
+
+As of June 2026, no free, reliable, turnkey solution exists for running
+macOS VMs on Linux for CI purposes. The macOS-on-Incus project is the
+most architecturally clean approach (native Incus, no Docker) but is
+blocked by Apple's API changes and a stalled developer community.
+
+Recommended path: use your existing Mac laptop + test_macos.sh (fake-home
+isolation) for macOS testing. Revisit macOS-on-Incus in 2027 only if the
+project resumes active development with binary Orchard releases.
+
+## Equipment Cost
+
+If you eventually want a dedicated CI Mac (not your laptop):
+  - Mac Mini 2014 (Intel, Monterey): ~$100  — minimum viable for SSH CI
+  - Mac Mini M1 2020 (Apple Silicon): ~$400 — best value, supports Tart VMs
+  Both run test_macos.sh with fake-home isolation. Zero subscription cost.
+
+
+══════════════════════════════════════════════════════════════════
+Below is the original AI-generated research (pre-exploration),
+kept for historical reference.
+══════════════════════════════════════════════════════════════════
+
+github.com
+https://github.com/sickcodes/docker-osx is great to test things on macos whitout having a real mabook, I'm ok to use it, but just for the sake of research, is there anything superior that I should review before sticking with docker-osx? All my hosts are linux
+Because you are hosting strictly on Linux, Docker-OSX is essentially a clever packaging tool. Under the hood, it orchestrates a standard QEMU/KVM Virtual Machine inside a Docker container wrapper. 
+Whether anything is "superior" depends entirely on your use case, performance needs, and desired infrastructure layout. The principal alternatives to evaluate before committing include:
+1. The Upstream Standard: Bare-Metal OSX-KVM
+Docker-OSX is built directly on top of the OSX-KVM repository. For long-term or production environments, bypassing Docker and using pure OSX-KVM is often considered superior. 
+
+    Why it is superior: Eliminates the extra layer of abstraction and container file system overhead (overlay2/UpperDir). It makes configuring native Linux storage, bridge networking, and raw disk mounts (.img / .qcow2) significantly cleaner.
+    Best For: Advanced users who want total control over QEMU arguments, raw performance tuning, and deep system integration without container dependencies. 
+
+2. The Type-1 Hypervisor Path: Proxmox VE + OSX-KVM
+If you are managing your Linux hosts via a hypervisor layer, deploying macOS on Proxmox VE (using Nick Sherlock's optimized OpenCore integrations) provides an enterprise-grade ecosystem. 
+
+    Why it is superior: Offers bare-metal performance through a Type-1 hypervisor. It provides a web-based GUI for cluster management, native hardware passthrough configurations, snapshots, and effortless live backups.
+    Best For: Dedicated homelabs, permanent build servers, and environments where high-performance hardware passthrough is required. 
+
+3. The Desktop-Centric Way: Quickemu
+Quickemu is a popular frontend wrapper for configuring desktop-grade QEMU virtual machines on Linux. 
+
+    Why it is superior: It abstracts complex QEMU commands into simple, declarative configurations. It natively handles optimal spices, audio routing, clipboard sharing, and display scaling automatically out of the box.
+    Best For: Local Linux desktop users who want a quick, snappy macOS graphical interface without dealing with Docker’s network or X11 forwarding forwarding complexities. 
+
+Direct Comparison Overview
+Metric / Feature 	Docker-OSX	Native OSX-KVM	Proxmox VE (KVM)	Quickemu
+Deployment Effort	⚡ Extremely Low (docker run)	⏳ Medium (Manual Scripting)	🔧 High (Dedicated Host)	⚡ Low (Simple CLI config)
+I/O & Disk Performance	Modest (Container overhead)	High (Raw/Qcow2 native)	Maximum (Type-1 Hypervisor)	High (Optimized QEMU)
+GPU/Hardware Passthrough	Complex / Restrictive	Flexible	Seamless (Native GUI control)	Moderate
+Best Target Environment	CI/CD, ephemeral testing	Standalone Linux Servers	Dedicated Homelabs/Infrastructure	Local Linux Desktops
+When you should stick with Docker-OSX
+Do not switch if your primary goal is automation, CI/CD pipelines, or isolated security research. Docker-OSX shines because it packages unique features like ephemeral container states (docker commit), automated serial/MAC generation for Apple services, and headless network tunneling shortcuts (usbfluxd) directly into a single, disposable unit. 
+If you want to evaluate your options further, let me know:
+
+    What is your primary goal? (e.g., iOS application building, automated malware analysis, or daily-driver desktop use)
+    Do you require hardware acceleration (GPU passthrough)?
+    Will this run on a local headless server or a graphical desktop workstation? 
+
+AI responses may include mistakes. Learn more
+
+    macOS in QEMU VM on Linux tutorial for beginners - May 2024
+    29 May 2024 — hello this is how to install the Mac OS operating system in a QMU virtual machine on Linux i'm on Kubuntu 2404 i searched on Googl...
+    54:17
+    YouTube·nmariusp
+    sickcodes/Docker-OSX - GitHub
+    Big thanks to @kholia for maintaining the upstream project, which Docker-OSX is built on top of: OSX-KVM. Also special thanks to @
+    GitHub
+    macOS VM on Linux & Windows using Docker-OSX
+    5 Oct 2021 — yes this is Docker OSX. we have got around 16K stars we got 18 contributors. got 100 issues which are mostly feature requests. and...
+    18m
+    YouTube·Sick Codes
+
+Show all
+2 use cases. Ephemeral to Test and validate that what runs on debian runs also on macos for certain apps that I build that are cross platform. Permanent, I might need a persistent macos without the real macbook hardware. My server is xeon x99 based and running incus as hypervisor. So ideally either ephemeral or permanent osx should be possible to be run as incus container, vm or oci container
+Because you are running an Intel Xeon X99 server powered by Incus, you have a highly optimal and modern architecture for both use cases. However, macOS cannot be run as a container (LXC/OCI) due to its absolute requirement for the Darwin kernel and specific x86 ACPI/topology configurations. 
+You must run macOS as an Incus Virtual Machine (VM). Because Incus natively relies on QEMU/KVM under the hood, it provides near bare-metal performance, fully utilizing your Xeon threads. 
+Understanding the Architecture Challenge
+Incus loves PCI hotplugging and standardizes heavily on VirtIO devices. Historically, macOS does not support standard PCI hotplugging well, meaning vanilla Incus VMs usually fail to boot OpenCore out-of-the-box. 
+To solve this, the community maintains the official macOS on Incus GitHub Project. This framework bridges the gap by leveraging Incus QEMU Scriptlets (raw.qemu.scriptlet) to dynamically rewrite the underlying QEMU execution parameters at boot, disabling hotplugging and injecting Apple-specific configurations natively. 
+Solution for Use Case 1: Ephemeral Testing (Debian vs macOS validation)
+To run automated or quick ephemeral tests without maintaining an operating system lifecycle, you can use Incus's native snapshot and instance cloning architecture. 
+
+    Build a Master Template VM: Follow the standard community process using Orchard (the macOS on Incus build tool) to build an installation ISO using standard Apple recovery images.
+    Install the Incus VM Agent: In late 2025, Incus officially added native macOS support to the incus-agent. When the agent is running inside your template, Incus can execute arbitrary commands inside the macOS guest directly from your Debian host shell.
+    The Ephemeral Workflow:
+    When you need to validate a cross-platform build, spin up a true ephemeral instance cloned from your master image using the --ephemeral flag:
+    bash
+
+    incus launch macos-template-image macos-test-vm --vm --ephemeral
+
+    Use code with caution.
+    Execute Tests: Run your validation pipeline directly via the Incus CLI:
+    bash
+
+    incus exec macos-test-vm -- target-test-binary --flag
+
+    Use code with caution.
+    Auto-Destruction: The moment you stop the VM (incus stop macos-test-vm), Incus wipes the entire instance and storage volume automatically, ensuring a pristine environment for your next run. 
+
+Solution for Use Case 2: Permanent Persistent Server
+For an enduring, persistent environment on your X99 setup, you will convert that same base configuration into a production-class infrastructure element.
+
+    Storage Backbone: Configure the VM disk on top of a high-performance Incus storage pool (such as ZFS or Ceph if clustered). Ensure your root volume disk configuration explicitly overrides the size to match your long-term requirements (e.g., incus config device override macos-persistent root size=100GiB).
+    CPU Topology & Penryn Masking: Xeon X99 architectures utilize Haswell/Broadwell-EP processors. macOS expects an Apple CPU topology. You must ensure your Incus profile configures a Penryn CPU mask or passes the host CPU topology transparently through the Python scriptlet overrides to bypass Apple's hardware locks.
+    Persistent Networking: Unlike Docker's restrictive port-forwarding proxies, map your persistent VM directly to an Incus bridge network (incusbr0) or an OVN network. This gives the macOS instance its own dedicated, persistent LAN IP address, allowing flawless, uninterrupted SSH, VNC, or Apple Remote Desktop (ARD) access natively from your local network. 
+
+Step-by-Step Implementation Framework
+To initialize this infrastructure on your Incus server:
+
+    Create an isolated profile for your macOS workloads:
+    bash
+
+    incus profile create macos
+
+    Use code with caution.
+    Pull and inject the verified community QEMU Scriptlet directly into the profile's raw configuration metadata:
+    bash
+
+    curl https://raw.githubusercontent.com/macOS-on-Incus/QEMU-Scriptlet/refs/heads/main/scriptlet.py | incus profile set macos raw.qemu.scriptlet -
+
+    Use code with caution.
+    Use the orchard tool to auto-generate your OpenCore/macOS boot loader images and map them directly into your Incus storage pools as custom volume disks. 
+
+If you are ready to configure the pipeline, would you like the specific Incus profile configuration layout (yaml) including the custom Xeon CPU keys, or do you need the exact syntax to configure Incus network ACLs to isolate your ephemeral testing instances? 
+AI responses may include mistakes. Learn more
+
+    Incus: are we macOS yet? - Linux Containers Forum
+    17 Nov 2024 — Running macOS on QEMU is not new at all; it's actually pretty easy if your hypervision software lets you do whatever you want with...
+    Linux Containers Forum
+    macOS on Incus guide - Tutorials - Linux Containers Forum
+    13 Nov 2025 — macOS on Incus guide * Hardware. Unlike Linux virtualization, macOS virtualization requires a specific hardware configuration to r...
+    Linux Containers Forum
+    Incus - Introduction - Linux Containers
+    What is Incus? ¶ Incus is a next-generation system container, application container, and virtual machine manager. It provides a us...
+    Linux Containers
+
+Show all
+so not using  https://github.com/kholia/OSX-KVM or https://github.com/sickcodes/docker-osx ???
+Correct. For an Incus-centric architecture, you should completely skip sickcodes/Docker-OSX and avoid using kholia/OSX-KVM directly. 
+You are using Incus as your primary hypervisor, which means introducing Docker containers just to launch QEMU VMs introduces a messy layer of nested virtualization and complex bridge network mapping.
+Why You Skip Docker-OSX
+Docker-OSX wraps QEMU in an OCI/Docker runtime environment. If you attempt to pass a Docker container into Incus, or run Docker inside an Incus LXC container to launch a macOS VM, you create unnecessary storage overhead (overlay2 over ZFS/Btrfs) and lose native Incus instance management control flags like --ephemeral and incus snapshot. 
+Why You Skip Raw OSX-KVM
+OSX-KVM relies on Libvirt/QEMU configurations where PCI hotplugging is handled manually or dynamically via custom shell boot scripts. Because Incus strictly enforces its own highly optimized VirtIO bus layouts and automatically executes PCI hotplug mechanisms at container/VM initialization, a raw OSX-KVM configuration will crash or fail to hand off to the OpenCore bootloader. 
+What You Use Instead: Native Incus Ecosystem
+Instead of those tools, use the official integration tooling maintained directly on the Linux Containers Forum: 
+
+    The Python Scriptlet: You bypass Incus's strict hotplug behavior by piping the custom macOS on Incus QEMU Scriptlet directly into your Incus profile configurations. This modifies the raw QEMU runtime arguments natively from within Incus.
+    Orchard: You use macOS-on-Incus/orchard (developed directly for Debian/Incus servers) to safely download, compile, sign, and build the native macOS recovery media .iso straight into your Incus storage pools.
+    The Incus Agent: Because Incus natively supports the incus-agent binary compiled for Darwin targets, you can execute testing pipelines from your server terminal via incus exec macos-vm -- command without needing VNC or SSH workarounds. 
+
+This approach gives you a clean, native setup, keeping your X99 server stable without unnecessary software layers. 
+Would you like to see the exact step-by-step commands to run Orchard on your server to pull the installation files? 
+AI responses may include mistakes. Learn more
+
+    sickcodes/Docker-OSX - GitHub
+    Capabilities * use iPhone OSX KVM on Linux using usbfluxd! * macOS Monterey VM on Linux! * Folder sharing- * USB passthrough (hotp...
+    GitHub
+    kholia/OSX-KVM: Run macOS on QEMU/KVM. With ... - GitHub
+    Installation Preparation * Install QEMU and other packages. sudo apt-get install qemu-system uml-utilities virt-manager git \ wget...
+    GitHub
+    Docker-OSX/FAQ.md at master - GitHub
+    Why docker? Docker provides a straightforward way to package a flexible turnkey solution to setting up a macOS VM. It is not the o...
+    GitHub
+
+Show all
+yes, be thorough and tldr
+🚀 TL;DR: The Core Architecture
+You cannot run macOS in a container (LXC/OCI). You will install macOS as a native Incus VM using the custom OpenCore orchestration tool Orchard. It bypasses Docker-OSX and raw OSX-KVM by stripping out Incus PCI hotplugging and injecting native incus-agent support directly into the Darwin kernel space.
+📦 1. Host Preparation
+Install dependencies on your Debian host and ensure the KVM module is active for your Xeon processor.
+bash
+
+# Install QEMU tools and compilation prerequisites
+sudo apt update && sudo apt install -y qemu-utils git curl python3 libguestfs-tools
+
+# Confirm KVM nested virtualization is configured correctly for Intel
+cat /sys/module/kvm_intel/parameters/nested
+
+Use code with caution.
+(Should return Y or 1. If not, enable nested virtualization in your host's modprobe config).
+🔧 2. Create the Custom Incus Profile
+Incus uses a Python scriptlet override to stop PCI hotplugging, allowing the OpenCore bootloader to see the virtual Apple hardware correctly.
+bash
+
+# 1. Create a dedicated profile for macOS virtual machines
+incus profile create macos
+
+# 2. Inject the official macOS-on-Incus QEMU Scriptlet
+curl -s githubusercontent.com | incus profile set macos raw.qemu.scriptlet -
+
+# 3. Apply necessary CPU, UEFI, and system topology adjustments to the profile
+incus profile edit macos <<EOF
+config:
+  limits.cpu: "4"
+  limits.memory: 8GiB
+  security.secureboot: "false"
+  raw.qemu: -device usb-tablet
+devices:
+  root:
+    path: /
+    pool: default
+    type: disk
+  eth0:
+    name: eth0
+    network: incusbr0
+    type: nic
+EOF
+
+Use code with caution.
+🍏 3. Download & Build macOS via Orchard
+Run Orchard to pull clean installation binaries straight from Apple servers and compile them into an OpenCore-compatible .img.
+bash
+
+# 1. Clone the official toolchain
+git clone github.com
+cd orchard
+
+# 2. List available macOS releases from Apple catalogs
+./orchard list
+
+# 3. Download and build the macOS installer image (e.g., Sequoia or Sonoma)
+# This will output a file named 'macos-sequoia.img' containing OpenCore and Recovery
+./orchard build sequoia
+
+Use code with caution.
+💿 4. Initialize and Run the VM
+bash
+
+# 1. Define an empty VM instance inside Incus with the macOS profile applied
+incus init macos-test --vm -p default -p macos
+
+# 2. Mount your newly generated Orchard image as the bootable disk
+incus config device add macos-test boot-drive disk source=$(pwd)/macos-sequoia.img path=/dev/xvda
+
+# 3. Launch the virtual machine
+incus start macos-test
+
+Use code with caution.
+🛠️ 5. Managing Ephemeral vs Permanent Environments
+For Use Case 1: Ephemeral Cross-Platform Tests
+Once your installation wizard finishes, compile the Incus Agent for macOS inside the guest. Stop the VM and take a master template snapshot.
+You can then run quick, isolated testing pipelines that auto-delete themselves on exit:
+bash
+
+# Spin up an isolated clone instantly
+incus launch macos-test macos-ci-run --vm -p default -p macos --ephemeral
+
+# Execute your Debian vs macOS cross-platform tests via CLI natively
+incus exec macos-ci-run -- /Users/shared/test-binaries/validate_app --verbose
+
+# Once execution stops, Incus completely purges the instance from the server
+incus stop macos-ci-run
+
+Use code with caution.
+For Use Case 2: Permanent Server Environment
+For your permanent instance, expand the storage layer directly through Incus pools and assign it a static IP on your network.
+bash
+
+# Resize the root persistent layer to accommodate toolchains/IDE environments
+incus config device override macos-test root size=150GiB
+
+# Ensure the VM boots automatically when the Xeon host reboots
+incus config set macos-test boot.autostart true
+
+Use code with caution.
+AI responses may include mistakes. Learn more
+
