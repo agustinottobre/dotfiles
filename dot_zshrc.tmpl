@@ -79,7 +79,7 @@ disable r
 # Git compdefs (after completions are loaded)
 # =============================================================================
 
-compdef config=git
+compdef config=chezmoi
 compdef wiki=git
 
 # =============================================================================
@@ -124,17 +124,16 @@ alias todo='vim -c "botright Todo"'
 # Functions
 # =============================================================================
 
-# Dotfiles management
+# Dotfiles management (chezmoi)
 function config(){
   if [[ $# == 0 ]]
   then
-    configfile=$(git --git-dir=$HOME/dotfiles/ ls-tree -r master --name-only | fzf --height 40% --layout=reverse | xargs -I {} echo "$HOME/"/{})
-    if [ ! -z ${configfile} ]
-    then
-      vim $configfile
-    fi
+    # Fuzzy-find and edit a managed dotfile
+    local f
+    f=$(chezmoi managed | fzf --height 40% --layout=reverse)
+    [[ -n "$f" ]] && chezmoi edit "$HOME/$f"
   else
-    git --git-dir=$HOME/dotfiles/ --work-tree=$HOME "${@:1}"
+    chezmoi "$@"
   fi
 }
 

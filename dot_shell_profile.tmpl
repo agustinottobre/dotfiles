@@ -107,14 +107,12 @@ alias conflicts='vim $(git diff --name-only --diff-filter=U | fzf-tmux)'
 function config(){
   if [[ $# == 0 ]]
   then
-    # configfile=$(git --git-dir=$HOME/dotfiles/ ls-tree -r master --name-only | fzf-tmux -q "$1" --height 40% --layout=reverse | xargs -I {} echo "$HOME/"{})
-    configfile=$(git --git-dir=$HOME/dotfiles/ ls-tree -r master --name-only | fzf-tmux --height 40% --layout=reverse | xargs -I {} echo "$HOME/"{})
-    if [ ! -z ${configfile} ]
-    then 
-      vim $configfile
-    fi
+    # Fuzzy-find and edit a managed dotfile
+    local f
+    f=$(chezmoi managed | fzf-tmux --height 40% --layout=reverse)
+    [[ -n "$f" ]] && chezmoi edit "$HOME/$f"
   else
-    git --git-dir=$HOME/dotfiles/ --work-tree=$HOME "${@:1}"
+    chezmoi "$@"
   fi
 }
 # command line fzf add
