@@ -13,6 +13,15 @@ NC='\033[0m'  # No Color
 RED_HI="${RED}"
 GREEN_HI="${GREEN}"
 
+# Setting fd as the default source for fzf (faster than find)
+# On Debian the binary is `fdfind`; on macOS/brew it's `fd`
+{{- if eq .chezmoi.os "linux" }}
+export FZF_DEFAULT_COMMAND='fdfind --type f --hidden --follow --exclude .git'
+{{- else }}
+export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow --exclude .git'
+{{- end }}
+export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+
 alias ll='ls -lha'
 NVIM_PATH='/usr/local/bin/nvim'
 alias vi=$NVIM_PATH
@@ -37,12 +46,6 @@ alias gittree='git log --tags --pretty="%H %d" --decorate=full --graph'
 alias glog='git log --date-order --all --graph --format="%C(green)%h%Creset %C(yellow)%an%Creset %C(blue bold)%ar%Creset %C(red bold)%d %Creset%s"'
 alias conflicts='vim $(git diff --name-only --diff-filter=U | fzf-tmux)'
 #alias remotefile open $(git-remote-url origin)/blob/$(git rev-parse --abbrev-ref HEAD)/$(fzf)
-
-# Setting fd as the default source for fzf
-export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow --exclude .git'
-
-# To apply the command to CTRL-T as well
-export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
 
 #### Functions
   function brew-list-sizes(){

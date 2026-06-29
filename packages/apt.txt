@@ -9,6 +9,7 @@ xsel
 ripgrep
 unzip
 fzf
+fd-find
 
 # Neovim - installed via AppImage in install script
 

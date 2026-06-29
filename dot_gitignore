@@ -1,0 +1,23 @@
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Secrets
+.ssh/config
+.ssh/known_hosts*
+.ssh/*_id*
+.ssh/id_*
+secrets.env
+*.env
+*.key
+*.pem
+
+# Backups
+.dotfiles_backup/
+*.bak
+*.swp

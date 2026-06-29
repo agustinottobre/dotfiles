@@ -1,5 +1,6 @@
 # Core CLI tools
 fzf
+fd
 ripgrep
 git
 zsh

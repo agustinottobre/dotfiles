@@ -19,6 +19,19 @@ fi
 # [ -s "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
 
 # =============================================================================
+# Tool defaults (sourced for all zsh sessions)
+# =============================================================================
+
+# Set fd as the default source for fzf (faster than find)
+# On Debian the binary is `fdfind`; on macOS/brew it's `fd`
+{{- if eq .chezmoi.os "linux" }}
+export FZF_DEFAULT_COMMAND='fdfind --type f --hidden --follow --exclude .git'
+{{- else }}
+export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow --exclude .git'
+{{- end }}
+export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+
+# =============================================================================
 # PATH additions for all shell types
 # =============================================================================
 
