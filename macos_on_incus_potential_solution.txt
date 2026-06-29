@@ -740,3 +740,72 @@ incus start macos-test
 6. **PCI hotplug disabled** — macOS doesn't support it.
 7. **image.os=macOS** — required by orchard scriptlet (if used).
 
+
+══════════════════════════════════════════════════════════════════
+FIX: Kernel Panic on Xeon X99 (prohibited symbol after progress)
+══════════════════════════════════════════════════════════════════
+
+## Symptom
+macOS recovery boots to Apple logo + progress bar, then shows "prohibited"
+symbol (circle with slash) and halts. This is an early kernel panic.
+
+## Root Cause
+Xeon X99 CPUs have locked MSRs (Model-Specific Registers). macOS attempts
+to write to MSR 0xE2 (CPU power management) during boot. With the MSR locked,
+the write causes a kernel panic. OpenCore can patch the kernel to avoid this.
+
+## Fix: Patch OSX-KVM config.plist
+
+Required kernel quirks for Xeon X99:
+
+  AppleCpuPmCfgLock = True       <-- CRITICAL: patches MSR 0xE2 writes
+  AppleXcpmCfgLock = True        <-- patches XCPM MSR writes
+  DisableIoMapper = True         <-- disables VT-d (X99 chipset issue)
+  LapicKernelPanic = True        <-- handles LAPIC panic on multi-socket
+  PanicNoKextDump = True         <-- prevents kext dump panic loop
+  ProvideCurrentCpuInfo = True   <-- passes host CPU topology
+
+Also enable verbose boot to see panic messages:
+
+  boot-args = -v keepsyms=1 debug=0x100
+  csr-active-config = 67000000  (disables SIP for recovery)
+
+  Misc → Debug → Target = 67    (output to file + screen)
+  Misc → Debug → DisableWatchDog = True
+
+## Patch Script (Python)
+
+  python3 -c "
+  import plistlib
+  with open('config.plist','rb') as f:
+      c = plistlib.load(f)
+  nvram = c['NVRAM']['Add']['7C436110-AB2A-4BBB-A880-FE41995C9F82']
+  nvram['boot-args'] = '-v keepsyms=1 debug=0x100'
+  nvram['csr-active-config'] = bytes([0x67, 0x00, 0x00, 0x00])
+  c['Kernel']['Quirks'].update({
+      'AppleCpuPmCfgLock': True,
+      'AppleXcpmCfgLock': True,
+      'DisableIoMapper': True,
+      'LapicKernelPanic': True,
+      'PanicNoKextDump': True,
+      'ProvideCurrentCpuInfo': True,
+  })
+  c['Misc']['Debug']['DisableWatchDog'] = True
+  c['Misc']['Debug']['Target'] = 67
+  with open('config.plist','wb') as f:
+      plistlib.dump(c, f)
+  "
+
+## Apply patched config to OpenCore disk
+
+  losetup --find --show -P /tmp/opencore-osxkvm.img
+  mount /dev/loop0p1 /tmp/oc
+  cp patched-config.plist /tmp/oc/EFI/OC/config.plist
+  umount /tmp/oc
+  losetup -d /dev/loop0
+
+## After fix
+
+Verbose boot shows scrolling kernel messages instead of prohibited symbol.
+MacOS recovery progresses to language selection → Utilities screen.
+
