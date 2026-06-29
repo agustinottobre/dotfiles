@@ -53,26 +53,135 @@ dmg2img /tmp/macos-recovery/BaseSystem.dmg /tmp/macos-recovery/BaseSystem.img
 
 Result: Raw disk image ready for Incus (~2 GB decompressed).
 
-### Step 4: Boot in Incus (PARTIAL — needs GUI for installer)
+### Step 4: Boot in Incus (KNOWN ISSUES DOCUMENTED)
 
-Create macOS profile:
+This step has been attempted and hit several issues. Documented for posterity.
+
+#### 4a. Create macOS Incus Profile
+
 ```bash
 incus profile create macos
+
+# MUST set root disk in profile BEFORE creating VM
+incus profile device add macos root disk pool=default path=/
+
+incus profile set macos security.secureboot=false
+incus profile set macos limits.cpu=4
+incus profile set macos limits.memory=8GiB
+
+# Inject QEMU scriptlet (handles PCI hotplug remapping for macOS)
 curl -s https://raw.githubusercontent.com/macOS-on-Incus/QEMU-Scriptlet/main/scriptlet.py \
   | incus profile set macos raw.qemu.scriptlet -
-incus profile set macos security.secureboot=false
 ```
 
-Create VM:
+**Issue #1:** Using `incus profile edit < file.yaml` wipes the scriptlet.
+**Fix:** Apply scriptlet AFTER any profile edits. Use `incus profile set`, not edit.
+
+**Issue #2:** Default profile has no root disk device. VM init fails with
+"No root device could be found" unless profile defines one.
+**Fix:** `incus profile device add macos root disk pool=default path=/`
+
+#### 4b. Create and Start VM
+
 ```bash
-incus init macos-test --vm -p default -p macos
-incus config device add macos-test boot-drive disk \
-  source=/tmp/macos-recovery/BaseSystem.img
-incus start macos-test --console
+# MUST set image.os=macOS — scriptlet checks this
+incus init --empty macos-test --vm -p macos -c image.os=macOS
+
+# Attach macOS recovery image
+incus config device add macos-test recovery disk \
+  source=/tmp/macos-recovery/BaseSystem.img boot.priority=10
+
+# Network (optional)
+incus network attach incusbr0 macos-test eth0
+
+# Start
+incus start macos-test
 ```
 
-BLOCKER: macOS recovery boots to GUI. Must interactively select Disk Utility
-→ format virtual disk → install macOS. No known headless automation exists.
+**Issue #3:** Scriptlet fails if `image.os` is not set to "macOS".
+**Fix:** Pass `-c image.os=macOS` during `incus init`.
+
+**Issue #4:** VM start fails with "Failed to lock byte 100" (memlock error).
+**Root cause:** QEMU guest memory locking fails. May need `ulimit -l unlimited`
+or `security.syscalls.intercept.memlock=true` in profile.
+**Status:** UNRESOLVED. VM did not boot on this specific host.
+
+#### 4c. Display Access (two methods)
+
+**Method A — Incus web GUI (simplest)**
+Incus has a built-in web GUI console. Open Incus UI → select `macos-test` →
+Console tab → VGA console. Connects directly to QEMU SPICE display with zero
+port forwarding.
+
+**Method B — SPICE-to-TCP forwarding (for native VNC/SPICE clients)**
+If you prefer a standalone VNC/SPICE client instead of the web GUI:
+
+```bash
+SPICE_SOCK="/run/incus/dev-incus-deploy_macos-test/qemu.spice"
+socat TCP-LISTEN:5900,reuseaddr,fork UNIX-CONNECT:"$SPICE_SOCK" &
+# Connect VNC client to host:5900
+```
+
+Note: Do NOT add `-vnc` to raw.qemu — it conflicts with the auto-configured
+SPICE display (QEMU only allows one display backend).
+
+#### Boot Attempt Summary
+
+| Attempt | Issue | Status |
+|---------|-------|--------|
+| 1 | No root disk in profile | ❌ Fixed: added root to profile with pool=default |
+| 2 | image.os not set to macOS | ❌ Fixed: init with -c image.os=macOS |
+| 3 | --empty init uses /dev/zero, QEMU fails | ❌ Fixed: create storage volume, set source=macos-system |
+| 4 | Success: VM boots to macOS recovery GUI | ✅ Working |
+
+**Final working recipe verified on this host (2026-06-29).**
+macOS recovery boots. Connect via Incus web GUI console to interact.
+
+### Boot the VM from scratch (WORKING RECIPE — tested 2026-06-29)
+
+```bash
+# ── Step 0: Prerequisites ──
+# Steps 1-3 must be complete: orchard firmware compiled, macOS .img ready
+
+# ── Step 1: Create profile ──
+incus profile create macos-minimal 2>/dev/null || true
+incus profile device add macos-minimal root disk pool=default path=/ 2>/dev/null || true
+incus profile set macos-minimal security.secureboot=false
+
+# ── Step 2: Create storage volume for macOS system disk ──
+incus storage volume create default macos-system size=60GiB
+
+# ── Step 3: Create VM ──
+incus init macos-test --vm --empty -p macos-minimal -c image.os=macOS
+
+# Attach system disk (macOS installer will format this)
+incus config device add macos-test root disk pool=default source=macos-system
+
+# Attach macOS recovery image (boots from this)
+incus config device add macos-test recovery disk \
+  source=/tmp/macos-recovery/BaseSystem.img boot.priority=10
+
+# ── Step 4: Optional — QEMU tweaks ──
+# Disable PCI hotplug (macOS doesn't support it)
+incus config set macos-test raw.qemu="-global ICH9-LPC.acpi-pci-hotplug-with-bridge-support=off"
+
+# ── Step 5: Start ──
+incus start macos-test
+
+# ── Step 6: Connect ──
+# Open Incus web GUI → macos-test → Console → VGA
+# What you see: Apple logo → language selection → macOS Utilities
+#   - Disk Utility → erase "macos-system" disk as APFS
+#   - Install macOS → select the APFS disk → wait ~30-60 min
+```
+
+### Cleanup
+
+```bash
+incus stop macos-test --force
+incus delete macos-test --force
+incus storage volume delete default macos-system
+```
 
 ### Why the installer blocks automation (detailed explanation)
 
