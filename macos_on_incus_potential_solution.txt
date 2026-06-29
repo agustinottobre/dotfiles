@@ -1,3 +1,116 @@
+# macOS on Incus — Complete Reproducible Exploration
+# Date: 2026-06-29
+# Server: Xeon X99, Debian 12 (bookworm), Incus 7.0.0, KVM nested=Y, 32 threads
+
+## Verdict (TL;DR)
+
+Three of four steps work. The macOS installer itself requires interactive GUI
+(Disk Utility), which is the only remaining blocker for full headless automation.
+
+  ✅ Step 1: Compile firmware    (Orchard init + build + genkeys)
+  ✅ Step 2: Download macOS image (OSX-KVM fetch-macOS-v2.py)
+  ✅ Step 3: Convert to raw img   (dmg2img)
+  ⚠️ Step 4: Boot in Incus        (firmware boots, installer needs GUI)
+
+## Reproducible Recipe
+
+### Prerequisites
+```bash
+apt-get install -y git curl python3 build-essential dmg2img
+```
+
+### Step 1: Compile OpenCore Firmware
+
+```bash
+git clone https://github.com/macOS-on-Incus/orchard
+cd orchard
+./orchard init        # Clones EDK2, OpenCorePkg, 13 submodules. ~2 min.
+./orchard build       # Compiles firmware. ~2 min. Output: audk/Build/*/OpenCore.efi
+./orchard genkeys     # Generates sb.cer, sb.crt, sb.key for UEFI signing.
+```
+
+Result: Firmware ready. ~500 MB in audk/Build/ directory.
+
+### Step 2: Download macOS Recovery Image
+
+Orchard's `package` step fails (Apple 405 — deprecated GET auth).
+Workaround: use OSX-KVM's standalone downloader.
+
+```bash
+git clone --depth 1 https://github.com/kholia/OSX-KVM
+cd OSX-KVM
+python3 fetch-macOS-v2.py --action download --os latest -o /tmp/macos-recovery
+```
+
+Result: 914 MB BaseSystem.dmg + BaseSystem.chunklist downloaded.
+         Strings show macOS 15.x (Sequoia).
+
+### Step 3: Convert DMG to Raw Image
+
+```bash
+dmg2img /tmp/macos-recovery/BaseSystem.dmg /tmp/macos-recovery/BaseSystem.img
+```
+
+Result: Raw disk image ready for Incus (~2 GB decompressed).
+
+### Step 4: Boot in Incus (PARTIAL — needs GUI for installer)
+
+Create macOS profile:
+```bash
+incus profile create macos
+curl -s https://raw.githubusercontent.com/macOS-on-Incus/QEMU-Scriptlet/main/scriptlet.py \
+  | incus profile set macos raw.qemu.scriptlet -
+incus profile set macos security.secureboot=false
+```
+
+Create VM:
+```bash
+incus init macos-test --vm -p default -p macos
+incus config device add macos-test boot-drive disk \
+  source=/tmp/macos-recovery/BaseSystem.img
+incus start macos-test --console
+```
+
+BLOCKER: macOS recovery boots to GUI. Must interactively select Disk Utility
+→ format virtual disk → install macOS. No known headless automation exists.
+
+### What Works as Alternatives (Today)
+
+1. **Docker-OSX** — docker pull sickcodes/docker-osx:auto
+   Pre-built images, headless SSH mode. Adds Docker layer on QEMU.
+
+2. **Real Mac + test_macos.sh** — ./tests/test_macos.sh
+   Fake-home isolation. Zero risk to real dotfiles. Already implemented.
+
+3. **Mac Mini as CI node** — Used M1 Mini ~$400
+   SSH in, run test_macos.sh. Zero subscription. Best long-term option.
+
+## Tools Evaluated (scorecard)
+
+| Tool | Step | Result | Blocker |
+|------|------|--------|---------|
+| Orchard | firmware compile | ✅ | — |
+| Orchard | macOS download | ❌ | Apple 405 auth change |
+| OSX-KVM fetch-macOS-v2 | macOS download | ✅ | — |
+| gibMacOS | macOS download | ⚠️ | Only sees ≤ Catalina (10.15) |
+| mist-cli | macOS download | ❌ | macOS-only binary |
+| dmg2img | dmg→img conversion | ✅ | — |
+| Incus + QEMU scriptlet | VM boot | ⚠️ | Needs GUI for installer |
+
+## Key Insight
+
+The macOS-on-Incus project architecture is correct. The QEMU scriptlet approach
+works. The firmware compiles cleanly. The missing piece isn't technical — it's
+that Apple's macOS installer has no headless/automated mode. Until Apple
+provides one (or someone reverse-engineers the installer), macOS VMs on Linux
+will require one interactive GUI session for initial setup.
+
+After that initial setup, snapshot the VM and clone for CI.
+
+══════════════════════════════════════════════════════════════════
+Below: original AI research and older exploration notes (reference)
+══════════════════════════════════════════════════════════════════
+
 # macOS on Incus — Actual Exploration Results
 # Date: 2026-06-29
 # Server: Xeon X99, Debian 12 (bookworm), Incus 7.0.0, KVM nested=Y
