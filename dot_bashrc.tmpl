@@ -1,12 +1,28 @@
 #!/bin/bash
+# =============================================================================
+# Bash config — compatibility fallback (Zsh+Zim is the primary shell)
+# =============================================================================
 
-source ~/.shell_profile
+# Basic aliases and editor config for when bash is used directly
+alias ll='ls -lha'
+export VISUAL=nvim
+export EDITOR="$VISUAL"
 
+set -o vi
+set +o noclobber
 
-# Add RVM to PATH for scripting. Make sure this is the last PATH variable change.
-export PATH="$PATH:$HOME/.rvm/bin"
-
-[ -f ~/.fzf.bash ] && source ~/.fzf.bash
+# FZF keybindings
+{{- if eq .chezmoi.os "linux" }}
+if [[ -f /usr/share/doc/fzf/examples/key-bindings.bash ]]; then
+  source /usr/share/doc/fzf/examples/key-bindings.bash
+elif [[ -f /usr/share/fzf/key-bindings.bash ]]; then
+  source /usr/share/fzf/key-bindings.bash
+elif [[ -f ~/.fzf.bash ]]; then
+  source ~/.fzf.bash
+fi
+{{- else }}
+[[ -f ~/.fzf.bash ]] && source ~/.fzf.bash
+{{- end }}
 if [ -f "$HOME/.cargo/env" ]; then
     . "$HOME/.cargo/env"
 fi

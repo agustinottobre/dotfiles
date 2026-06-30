@@ -36,28 +36,28 @@ Host github.com
   User agustinottobre
 
 Host gitlab.com
-  Hostname gitlab.com
-  Identityfile ~/.ssh/gitlab_id_rsa
+  HostName gitlab.com
+  IdentityFile ~/.ssh/gitlab_id_rsa
   User agustinottobre
 
 Host tower 192.168.127.7 tower.net.cloud
-  Hostname 192.168.127.7
-  Identityfile ~/.ssh/tower_id_rsa
+  HostName 192.168.127.7
+  IdentityFile ~/.ssh/tower_id_rsa
   User root
 
 Host tower.local
-  Hostname tower.local
-  Identityfile ~/.ssh/tower_id_rsa
+  HostName tower.local
+  IdentityFile ~/.ssh/tower_id_rsa
   User root
 
 Host tower01.local
-  Hostname tower01.local
-  Identityfile ~/.ssh/tower_id_rsa
+  HostName tower01.local
+  IdentityFile ~/.ssh/tower_id_rsa
   User root
 
 Host tower02.local
-  Hostname tower02.local
-  Identityfile ~/.ssh/tower_id_rsa
+  HostName tower02.local
+  IdentityFile ~/.ssh/tower_id_rsa
   User root
 
 Host hostinger
@@ -93,12 +93,12 @@ Host lima-default
   ControlMaster auto
   ControlPath "/Users/aox/.lima/default/ssh.sock"
   ControlPersist yes
-  Hostname 127.0.0.1
+  HostName 127.0.0.1
   Port 60022
 {{- end }}
 
 Host router
-  Hostname 102.168.127.1
+  HostName 102.168.127.1
   User root
   IdentityFile ~/.ssh/linksys_wrt3200acm_id
 

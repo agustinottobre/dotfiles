@@ -92,6 +92,12 @@ check_zsh_bindkey() {
         && pass "${label:-bindkey $key → $widget}" || fail "${label:-bindkey $key → $widget}" "not bound"
 }
 
+check_zsh_widget() {
+    local widget="$1" label="${2:-widget $widget}"
+    zsh_test "zle -l | grep -qF '$widget'" 2>/dev/null \
+        && pass "$label" || fail "$label" "widget not defined"
+}
+
 check_zsh_func() {
     local func="$1" label="${2:-$func}"
     zsh_test "whence -f $func >/dev/null 2>&1" >/dev/null 2>&1 \
@@ -180,7 +186,8 @@ check_file ".zshenv"
 check_file ".zprofile"
 check_file ".zimrc"
 check_file ".bashrc"
-check_file ".shell_profile"
+# shell_profile is deprecated — verify it is NOT deployed
+[[ -f "$TEST_HOME/.shell_profile" ]] && fail ".shell_profile should be deprecated" || pass "no .shell_profile (deprecated)"
 
 # ── Other Dotfiles ──────────────────────────────────────────────────────────
 header "Other dotfiles"
@@ -214,6 +221,9 @@ check_grep ".ssh/config" "UseKeychain yes" "macOS: UseKeychain enabled"
 check_grep ".ssh/config" "colima" "macOS: colima Include present"
 check_grep ".ssh/config" "IdentitiesOnly yes" "IdentitiesOnly enabled"
 check_grep ".ssh/config" "AddKeysToAgent yes" "AddKeysToAgent enabled"
+# Verify SSH keyword capitalization is consistent
+! grep -q "Hostname " "$TEST_HOME/.ssh/config" 2>/dev/null && pass "SSH: no lowercase Hostname" || fail "SSH: lowercase Hostname found"
+! grep -q "Identityfile" "$TEST_HOME/.ssh/config" 2>/dev/null && pass "SSH: no lowercase Identityfile" || fail "SSH: lowercase Identityfile found"
 
 # ── Environment Variables ───────────────────────────────────────────────────
 header "Environment variables"
@@ -244,6 +254,9 @@ zsh_test '[[ -n $FZF_CTRL_T_COMMAND ]]' 2>/dev/null \
 check_zsh_bindkey '^T'   'fzf-file-widget'   'bindkey ^T → fzf-file-widget'
 check_zsh_bindkey '^R'   'fzf-history-widget' 'bindkey ^R → fzf-history-widget'
 check_zsh_bindkey '^X^F' 'fzf-file-widget'    'bindkey ^X^F → fzf-file-widget'
+check_zsh_widget 'fzf-file-widget'    'widget fzf-file-widget'
+check_zsh_widget 'fzf-history-widget' 'widget fzf-history-widget'
+check_zsh_widget 'fzf-cd-widget'      'widget fzf-cd-widget'
 
 check_cmd "fzf"
 check_cmd "fd" "fd"
@@ -268,6 +281,8 @@ zsh_test 'alias vi 2>/dev/null | grep -q nvim' 2>/dev/null \
     && pass 'vi → nvim' || fail 'vi alias missing'
 zsh_test 'alias vim 2>/dev/null | grep -q nvim' 2>/dev/null \
     && pass 'vim → nvim' || fail 'vim alias missing'
+# On macOS, NVIM_PATH should point to /usr/local/bin/nvim (Homebrew install location)
+check_grep ".zshrc" '/usr/local/bin/nvim' 'NVIM_PATH=/usr/local/bin/nvim (macOS)'
 zsh_test 'alias calc 2>/dev/null | grep -q qalc' 2>/dev/null \
     && pass 'calc → qalc' || fail 'calc alias missing'
 
@@ -322,6 +337,22 @@ check_cmd "rg"   "rg (ripgrep)"
 check_cmd "age"
 check_cmd "chezmoi"
 check_cmd "nvim"
+check_file ".config/nvim/lua/custom/plugins/init.lua" "nvim custom plugins"
+# nvim basic functionality and config syntax
+nvim --headless -c 'quit' 2>/dev/null && pass "nvim: headless startup OK" || warn "nvim: headless startup failed"
+if [[ -f "$TEST_HOME/.config/nvim/init.lua" ]]; then
+    nvim -u NONE --headless --cmd "lua local ok, err = load(io.open('$TEST_HOME/.config/nvim/init.lua'):read('*a')); if ok then print('SYNTAX_OK') else print('SYNTAX_FAIL: '..err) end" -c 'cq' 2>&1 | grep -q SYNTAX_OK \
+        && pass "nvim: init.lua Lua syntax OK" || fail "nvim: init.lua Lua syntax error"
+fi
+if [[ -f "$TEST_HOME/.config/nvim/lua/custom/plugins/init.lua" ]]; then
+    nvim -u NONE --headless --cmd "lua local ok, err = load(io.open('$TEST_HOME/.config/nvim/lua/custom/plugins/init.lua'):read('*a')); if ok then print('SYNTAX_OK') else print('SYNTAX_FAIL: '..err) end" -c 'cq' 2>&1 | grep -q SYNTAX_OK \
+        && pass "nvim: custom plugins Lua syntax OK" || fail "nvim: custom plugins Lua syntax error"
+fi
+# nvim: confirm no hard errors at startup (vim.lsp.config needs nvim >= 0.11)
+NVIM_OUTPUT=$(timeout 15 nvim --headless -c 'quit' 2>&1) || true
+echo "$NVIM_OUTPUT" | grep -qiE "vim.lsp.config.*nil|attempt to call field" \
+    && fail "nvim: startup has lsp config error (needs nvim >= 0.11)" \
+    || pass "nvim: no hard errors on startup"
 check_cmd "starship"
 
 # ── Git Config ──────────────────────────────────────────────────────────────
@@ -356,7 +387,7 @@ check_file ".config/chezmoi/chezmoi.toml" "chezmoi config"
 header "Zsh startup sanity"
 ZSH_OUT=$(HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" zsh -l -i -c 'echo OK' 2>&1 || true)
 ZSH_CLEAN=$(echo "$ZSH_OUT" | grep -iv "can't change option: zle" | grep -iv "Detected a new version" | grep -iv "Regenerated completions" || true)
-if echo "$ZSH_CLEAN" | grep -qiE "error|command not found|no such file|permission denied"; then
+if echo "$ZSH_CLEAN" | grep -qiE "error|command not found|no such file|permission denied|unknown command"; then
     fail "zsh startup has errors" "$(echo "$ZSH_CLEAN" | grep -iE 'error|not found|no such|denied' | head -5)"
 else
     pass "zsh starts cleanly"
@@ -383,6 +414,59 @@ check_grep ".gitconfig" 'filter "lfs"' "gitconfig: LFS filter"
 check_grep ".myclirc" 'key_bindings = vi' "myclirc: vi keybindings"
 check_grep ".taskrc" 'taskd.server' "taskrc: taskd sync"
 check_grep ".config/starship.toml" 'show_always = true' "starship: username always shown"
+
+header "Starship config integrity"
+if [[ -f "$TEST_HOME/.config/starship.toml" ]]; then
+    grep -q '\$sudo' "$TEST_HOME/.config/starship.toml" 2>/dev/null \
+        && pass "starship: format includes \$sudo" \
+        || fail "starship: format missing \$sudo"
+    ! grep -q "sudovimstatdirectory" "$TEST_HOME/.config/starship.toml" 2>/dev/null \
+        && pass "starship: no corrupt format token (sudovimstatdirectory)" \
+        || fail "starship: format still has corrupt token sudovimstatdirectory"
+    ! grep -q "!TMUX" "$TEST_HOME/.config/starship.toml" 2>/dev/null \
+        && pass "starship: hostname detect_env_vars fixed (no !TMUX negation)" \
+        || fail "starship: hostname detect_env_vars still has !TMUX"
+    ! grep -q "vim_status" "$TEST_HOME/.config/starship.toml" 2>/dev/null \
+        && pass "starship: no stale vim_status reference in comment" \
+        || fail "starship: comment still references vim_status"
+else
+    warn "starship.toml not found in test home"
+fi
+
+# ── Age Encryption Roundtrip ─────────────────────────────────────────────────
+header "Age encryption roundtrip"
+if command -v age >/dev/null 2>&1; then
+    AGE_KEY="$TEST_HOME/.config/chezmoi/key.txt"
+    AGE_PUBKEY=$(grep 'public key:' "$AGE_KEY" 2>/dev/null | sed 's/.*public key: *//')
+    if [[ -n "$AGE_PUBKEY" ]]; then
+        pass "age: key pair found"
+    else
+        fail "age: no public key in key.txt"
+    fi
+
+    AGE_TESTDATA="dotfiles-age-roundtrip-$$"
+    AGE_ENCFILE="/tmp/age-test-$$.age"
+    echo "$AGE_TESTDATA" | age -r "$AGE_PUBKEY" -o "$AGE_ENCFILE" 2>/dev/null \
+        && pass "age: encrypt OK" || fail "age: encrypt failed"
+    age -d -i "$AGE_KEY" "$AGE_ENCFILE" 2>/dev/null | grep -q "$AGE_TESTDATA" \
+        && pass "age: decrypt roundtrip OK" || fail "age: decrypt roundtrip mismatch"
+    rm -f "$AGE_ENCFILE"
+
+    # SSH config encryption
+    SSH_TMPL="$REPO_DIR/private_dot_ssh/config.tmpl"
+    SSH_ENCFILE="/tmp/ssh-config-test-$$.age"
+    if [[ -f "$SSH_TMPL" ]]; then
+        age -r "$AGE_PUBKEY" -o "$SSH_ENCFILE" "$SSH_TMPL" 2>/dev/null \
+            && pass "SSH config: encrypted with age" || fail "SSH config: age encrypt failed"
+        age -d -i "$AGE_KEY" "$SSH_ENCFILE" 2>/dev/null | grep -q "Host github.com" \
+            && pass "SSH config: decrypt + content check OK" || fail "SSH config: decrypt or content mismatch"
+        rm -f "$SSH_ENCFILE"
+    else
+        fail "SSH config template not found at $SSH_TMPL"
+    fi
+else
+    warn "age command not found, skipping encryption tests"
+fi
 
 # ── macOS-specific: skhd ────────────────────────────────────────────────────
 header "macOS: skhd"

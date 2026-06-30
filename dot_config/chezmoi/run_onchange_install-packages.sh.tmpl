@@ -94,22 +94,18 @@ install_starship() {
 
 install_neovim_linux() {
     local nvim_bin="{{ .chezmoi.homeDir }}/.local/bin/nvim"
-    local nvim_version
 
-    if command_exists nvim; then
-        echo "Neovim already installed."
+    if command_exists nvim && nvim --headless -c 'quit' 2>/dev/null; then
+        echo "Neovim already installed and working."
         return
     fi
+    echo "Installing Neovim (latest nightly AppImage)..."
 
-    echo "Installing Neovim (latest AppImage)..."
-
-    # Try to get latest version or fall back to known stable
-    nvim_version=$(curl -sL https://api.github.com/repos/neovim/neovim/releases/latest 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' || echo "v0.10.0")
-    nvim_version=${nvim_version#v}
+    local nvim_url="https://github.com/neovim/neovim/releases/download/nightly/nvim-linux-x86_64.appimage"
 
     mkdir -p "{{ .chezmoi.homeDir }}/.local/bin"
 
-    curl -fsSL -o "$nvim_bin" "https://github.com/neovim/neovim/releases/download/v${nvim_version}/nvim-linux-x86_64.appimage"
+    curl -fsSL -o "$nvim_bin" "$nvim_url"
     chmod u+x "$nvim_bin"
 
     # Ensure fusermount is available before trying to run the AppImage.
@@ -170,19 +166,18 @@ install_neovim_linux() {
 # used for Linux AppImages.
 
 install_neovim_darwin() {
-    local nvim_version
     local arch
     local nvim_arch
     local tmp_dir="{{ .chezmoi.homeDir }}/.local/bin"
     local archive="$tmp_dir/nvim-macos.tar.gz"
     local extracted_dir
 
-    if command_exists nvim; then
-        echo "Neovim already installed."
+    if command_exists nvim && nvim --headless -c 'quit' 2>/dev/null; then
+        echo "Neovim already installed and working."
         return
     fi
 
-    echo "Installing Neovim (latest) for macOS..."
+    echo "Installing Neovim (latest nightly) for macOS..."
 
     arch=$(uname -m)
     if [ "$arch" = "arm64" ]; then
@@ -191,14 +186,11 @@ install_neovim_darwin() {
         nvim_arch="x86_64"
     fi
 
-    nvim_version=$(curl -sL https://api.github.com/repos/neovim/neovim/releases/latest 2>/dev/null | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' || echo "v0.10.0")
-    nvim_version=${nvim_version#v}
-    echo "Latest stable: v$nvim_version"
+    local nvim_url="https://github.com/neovim/neovim/releases/download/nightly/nvim-macos-${nvim_arch}.tar.gz"
 
     mkdir -p "$tmp_dir"
 
-    curl -fsSL -o "$archive" \
-        "https://github.com/neovim/neovim/releases/download/v${nvim_version}/nvim-macos-${nvim_arch}.tar.gz"
+    curl -fsSL -o "$archive" "$nvim_url"
 
     tar -xzf "$archive" -C "$tmp_dir"
     rm -f "$archive"
@@ -262,7 +254,7 @@ install_age_key() {
                     # Extract public key from the generated identity file
                     # age identity files have format: AGE IDENTITY 1\n<private_key>\n\nPublic key: age1...\n
                     local actual_pubkey
-                    actual_pubkey=$(grep '^Public key:' "$key_file" 2>/dev/null | sed 's/^Public key: *//')
+                    actual_pubkey=$(grep 'public key:' "$key_file" 2>/dev/null | sed 's/.*public key: *//')
                     if [ -n "$actual_pubkey" ]; then
                         sed -i "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$actual_pubkey/" "$chezmoi_toml"
                         echo "Auto-filled 'recipient' in chezmoi.toml with public key: $actual_pubkey"
@@ -278,6 +270,24 @@ install_age_key() {
             echo "WARNING: chezmoi not found. Cannot generate age key."
             echo "Install chezmoi first, then run: chezmoi age-keygen --output=$key_file"
         fi
+    fi
+}
+
+# --- Chezmoi Zsh Completions ---
+
+install_chezmoi_completions() {
+    local comp_dir="/usr/local/share/zsh/site-functions"
+    local comp_file="$comp_dir/_chezmoi"
+
+    if [[ -f "$comp_file" ]]; then
+        return  # Already installed
+    fi
+
+    if command -v chezmoi >/dev/null 2>&1; then
+        mkdir -p "$comp_dir" 2>/dev/null || true
+        chezmoi completion zsh > "$comp_file" 2>/dev/null \
+            && echo "Chezmoi completions installed to $comp_file" \
+            || echo "WARNING: Could not install chezmoi completions"
     fi
 }
 
@@ -298,6 +308,9 @@ main() {
     install_starship
     install_tpm
     install_age_key
+
+    # Install chezmoi zsh completions (for compdef config=chezmoi)
+    install_chezmoi_completions
 
     echo "=== Setup Complete ==="
     echo "NOTE: You may need to restart your shell or source ~/.zshrc"

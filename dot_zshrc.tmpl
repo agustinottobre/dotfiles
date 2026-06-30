@@ -77,10 +77,13 @@ disable r
 
 # =============================================================================
 # Git compdefs (after completions are loaded)
-# =============================================================================
-
-compdef config=chezmoi
 compdef wiki=git
+# Optional: use chezmoi completions for config() if available, git otherwise
+if (( ${+functions[_chezmoi]} )); then
+  compdef config=chezmoi
+else
+  compdef config=git
+fi
 
 # =============================================================================
 # Aliases
@@ -93,7 +96,7 @@ alias ll='ls -lha'
 {{- if eq .chezmoi.os "darwin" }}
 NVIM_PATH='/usr/local/bin/nvim'
 {{- else }}
-NVIM_PATH='/usr/local/bin/nvim'
+NVIM_PATH="$HOME/.local/bin/nvim"
 {{- end }}
 alias vi=$NVIM_PATH
 alias vim=$NVIM_PATH

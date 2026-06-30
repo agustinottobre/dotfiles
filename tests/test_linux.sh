@@ -112,6 +112,11 @@ check_zsh_bindkey() {
         && pass "${3:-bindkey $1 → $2}" || fail "${3:-bindkey $1 → $2}" "not bound"
 }
 
+check_zsh_widget() {
+    zsh_exec "zle -l | grep -qF '$1'" >/dev/null 2>&1 \
+        && pass "${2:-widget $1}" || fail "${2:-widget $1}" "widget not defined"
+}
+
 # ── Cleanup ─────────────────────────────────────────────────────────────────
 cleanup() {
     if [[ "$MODE" == "incus" ]]; then
@@ -160,7 +165,7 @@ if [[ "$MODE" == "incus" ]]; then
     incus network attach incusbr0 "$CONTAINER_NAME" eth0 2>/dev/null || true
     sleep 2
     incus exec "$CONTAINER_NAME" -- apt-get update -qq 2>/dev/null
-    incus exec "$CONTAINER_NAME" -- apt-get install -y -qq git zsh curl 2>/dev/null
+    incus exec "$CONTAINER_NAME" -- apt-get install -y -qq git zsh curl fzf fd-find 2>/dev/null
     OS_NAME=$(incus exec "$CONTAINER_NAME" -- cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d= -f2 | tr -d '"')
     echo "Container OS: $OS_NAME"
 fi
@@ -208,7 +213,9 @@ fi
 
 header "Shell config files"
 check_file ".zshrc"; check_file ".zshenv"; check_file ".zprofile"
-check_file ".zimrc";  check_file ".bashrc";  check_file ".shell_profile"
+check_file ".zimrc";  check_file ".bashrc"
+# shell_profile is deprecated — verify it is NOT deployed
+! file_test ".shell_profile" && pass "no .shell_profile (deprecated)" || fail ".shell_profile should be deprecated"
 
 header "Other dotfiles"
 check_file ".gitconfig"; check_file ".myclirc"; check_file ".taskrc"
@@ -238,6 +245,9 @@ check_grep ".ssh/config" "UseKeychain" "no UseKeychain (macOS only)" "true"
 check_grep ".ssh/config" "colima" "no colima Include (macOS only)" "true"
 check_grep ".ssh/config" "IdentitiesOnly yes" "IdentitiesOnly enabled"
 check_grep ".ssh/config" "AddKeysToAgent yes" "AddKeysToAgent enabled"
+# Verify SSH keyword capitalization is consistent (HostName not Hostname, IdentityFile not Identityfile)
+! grep_file ".ssh/config" "Hostname " && pass "SSH: no lowercase Hostname" || fail "SSH: lowercase Hostname found"
+! grep_file ".ssh/config" "Identityfile" && pass "SSH: no lowercase Identityfile" || fail "SSH: lowercase Identityfile found"
 
 header "Environment variables (zsh login)"
 check_var '$EDITOR == nvim' 'EDITOR=nvim'
@@ -264,6 +274,9 @@ check_zsh_bindkey '^T'   'fzf-file-widget'     'bindkey ^T → fzf-file-widget'
 check_zsh_bindkey '^R'   'fzf-history-widget'   'bindkey ^R → fzf-history-widget'
 check_zsh_bindkey '^X^F' 'fzf-file-widget'      'bindkey ^X^F → fzf-file-widget'
 check_zsh_bindkey '^[[C' 'fzf-cd-widget'        'bindkey ^[[C → fzf-cd-widget'
+check_zsh_widget 'fzf-file-widget'    'widget fzf-file-widget'
+check_zsh_widget 'fzf-history-widget' 'widget fzf-history-widget'
+check_zsh_widget 'fzf-cd-widget'      'widget fzf-cd-widget'
 check_cmd "fzf"; check_cmd "fdfind"
 
 # fdfind functional test
@@ -294,6 +307,8 @@ header "Shell aliases"
 check_zsh_alias 'll'  'ls -lha'  'll → ls -lha'
 check_zsh_alias 'vi'  'nvim'     'vi → nvim'
 check_zsh_alias 'vim' 'nvim'     'vim → nvim'
+# On Linux, NVIM_PATH should point to ~/.local/bin/nvim (bootstrap install location)
+check_grep ".zshrc" '.local/bin/nvim' 'NVIM_PATH=~/.local/bin/nvim (Linux)'
 check_zsh_alias 'calc' 'qalc'    'calc → qalc'
 check_zsh_alias 'glog' 'git log' 'glog → git log'
 check_zsh_alias 'gittree' 'git log' 'gittree → git log'
@@ -345,6 +360,40 @@ else
 fi
 check_file ".config/nvim/lua/custom/plugins/init.lua" "nvim custom plugins"
 
+# nvim: basic functionality
+if [[ "$MODE" == "local" ]]; then
+    nvim --headless -c 'quit' 2>/dev/null && pass "nvim: headless startup OK" || warn "nvim: headless startup failed (runtime may be broken)"
+else
+    exec_cmd "nvim --headless -c 'quit'" 2>/dev/null && pass "nvim: headless startup OK" || warn "nvim: headless startup failed"
+fi
+
+# nvim: Lua config syntax
+if [[ "$MODE" == "local" ]]; then
+    CHECK_INIT="$TARGET_HOME/.config/nvim/init.lua"
+    CHECK_PLUGINS="$TARGET_HOME/.config/nvim/lua/custom/plugins/init.lua"
+    if [[ -f "$CHECK_INIT" ]]; then
+        SYNTAX_RESULT=$(timeout 10 nvim -u NONE --headless --cmd "lua local ok, err = load(io.open('$CHECK_INIT'):read('*a')); if ok then print('SYNTAX_OK') else print('SYNTAX_FAIL: '..err) end" -c 'cq' 2>&1) || true
+        echo "$SYNTAX_RESULT" | grep -q SYNTAX_OK \
+            && pass "nvim: init.lua Lua syntax OK" || fail "nvim: init.lua Lua syntax error"
+    fi
+    if [[ -f "$CHECK_PLUGINS" ]]; then
+        SYNTAX_RESULT=$(timeout 10 nvim -u NONE --headless --cmd "lua local ok, err = load(io.open('$CHECK_PLUGINS'):read('*a')); if ok then print('SYNTAX_OK') else print('SYNTAX_FAIL: '..err) end" -c 'cq' 2>&1) || true
+        echo "$SYNTAX_RESULT" | grep -q SYNTAX_OK \
+            && pass "nvim: custom plugins Lua syntax OK" || fail "nvim: custom plugins Lua syntax error"
+    fi
+else
+    # Incus mode: just check files exist (syntax validated by template test)
+    true
+fi
+
+# nvim: confirm no hard errors at startup (vim.lsp.config needs nvim >= 0.11)
+if [[ "$MODE" == "local" ]]; then
+    NVIM_OUTPUT=$(timeout 15 nvim --headless -c 'quit' 2>&1) || true
+    echo "$NVIM_OUTPUT" | grep -qiE "vim.lsp.config.*nil|attempt to call field" \
+        && fail "nvim: startup has lsp config error (needs nvim >= 0.11)" \
+        || pass "nvim: no hard errors on startup"
+fi
+
 # starship
 if [[ "$MODE" == "local" ]]; then
     which starship >/dev/null 2>&1 && pass "starship: $(starship --version 2>&1 | head -1)" || fail "starship not found"
@@ -395,19 +444,15 @@ fi
 header "Zsh startup sanity"
 ZSH_STARTUP=$(zsh_exec 'echo OK')
 ZSH_CLEAN=$(echo "$ZSH_STARTUP" | grep -iv "can't change option: zle" | grep -iv "Detected a new version" | grep -iv "Regenerated completions" || true)
-if echo "$ZSH_CLEAN" | grep -qiE "error|command not found|no such file|permission denied"; then
+if echo "$ZSH_CLEAN" | grep -qiE "error|command not found|no such file|permission denied|unknown command"; then
     fail "zsh startup has errors" "$(echo "$ZSH_CLEAN" | grep -iE 'error|not found|no such|denied' | head -5)"
 else
     pass "zsh starts cleanly"
 fi
 
 header "Bash startup"
-if [[ "$MODE" == "local" ]]; then
-    check_grep ".shell_profile" "fdfind" "bash: FZF_DEFAULT_COMMAND=fdfind in .shell_profile"
-else
-    BASH_FZF=$(bash_exec 'echo $FZF_DEFAULT_COMMAND')
-    echo "$BASH_FZF" | grep -q "fdfind" && pass "bash FZF uses fdfind" || fail "bash FZF" "got: $BASH_FZF"
-fi
+BASH_FZF=$(bash_exec 'echo $FZF_DEFAULT_COMMAND')
+echo "$BASH_FZF" | grep -q "fdfind" && pass "bash FZF uses fdfind" || fail "bash FZF" "got: $BASH_FZF"
 
 header "Bin scripts"
 if [[ "$MODE" == "local" ]]; then
@@ -431,6 +476,89 @@ check_grep ".myclirc" 'key_bindings = vi' "myclirc: vi keybindings"
 check_grep ".taskrc" 'taskd.server' "taskrc: taskd sync server"
 check_grep ".config/starship.toml" 'show_always = true' "starship: username always shown"
 
+header "Starship config integrity"
+# Corrupt format token regression: $sudovimstatdirectory was a single invalid module
+# instead of $sudo$directory. Verify it's absent from the format string.
+if file_test ".config/starship.toml"; then
+    grep_file ".config/starship.toml" '\$sudo' \
+        && pass "starship: format includes \$sudo" \
+        || fail "starship: format missing \$sudo"
+    ! grep_file ".config/starship.toml" "sudovimstatdirectory" \
+        && pass "starship: no corrupt format token (sudovimstatdirectory)" \
+        || fail "starship: format still has corrupt token sudovimstatdirectory"
+    ! grep_file ".config/starship.toml" "!TMUX" \
+        && pass "starship: hostname detect_env_vars fixed (no !TMUX negation)" \
+        || fail "starship: hostname detect_env_vars still has !TMUX"
+    ! grep_file ".config/starship.toml" "vim_status" \
+        && pass "starship: no stale vim_status reference in comment" \
+        || fail "starship: comment still references vim_status"
+else
+    warn "starship.toml not found in test home"
+fi
+
+# ── Age Encryption Roundtrip ─────────────────────────────────────────────────
+header "Age encryption roundtrip"
+if exec_cmd "command -v age" >/dev/null 2>&1; then
+    # For local mode, use the HOST age key (test home doesn't have its own)
+    if [[ "$MODE" == "local" ]]; then
+        AGE_KEY="$HOME/.config/chezmoi/key.txt"
+    else
+        AGE_KEY="$TARGET_HOME/.config/chezmoi/key.txt"
+    fi
+    AGE_PUBKEY=""
+    if [[ "$MODE" == "local" ]]; then
+        AGE_PUBKEY=$(grep 'public key:' "$AGE_KEY" 2>/dev/null | sed 's/.*public key: *//')
+    else
+        AGE_PUBKEY=$(incus exec "$CONTAINER_NAME" -- grep 'public key:' "$AGE_KEY" 2>/dev/null | sed 's/.*public key: *//')
+    fi
+    if [[ -n "$AGE_PUBKEY" ]]; then
+        pass "age: key pair found"
+    else
+        fail "age: no public key in key.txt"
+    fi
+
+    # Encrypt → Decrypt roundtrip
+    AGE_TESTDATA="dotfiles-age-roundtrip-$$"
+    AGE_ENCFILE="/tmp/age-test-$$.age"
+    if [[ "$MODE" == "local" ]]; then
+        echo "$AGE_TESTDATA" | age -r "$AGE_PUBKEY" -o "$AGE_ENCFILE" 2>/dev/null \
+            && pass "age: encrypt OK" || fail "age: encrypt failed"
+        age -d -i "$AGE_KEY" "$AGE_ENCFILE" 2>/dev/null | grep -q "$AGE_TESTDATA" \
+            && pass "age: decrypt roundtrip OK" || fail "age: decrypt roundtrip mismatch"
+        rm -f "$AGE_ENCFILE"
+    else
+        incus exec "$CONTAINER_NAME" -- bash -c "echo '$AGE_TESTDATA' | age -r '$AGE_PUBKEY' -o '$AGE_ENCFILE'" 2>/dev/null \
+            && pass "age: encrypt OK" || fail "age: encrypt failed"
+        incus exec "$CONTAINER_NAME" -- bash -c "age -d -i '$AGE_KEY' '$AGE_ENCFILE' | grep -q '$AGE_TESTDATA'" 2>/dev/null \
+            && pass "age: decrypt roundtrip OK" || fail "age: decrypt roundtrip mismatch"
+        incus exec "$CONTAINER_NAME" -- rm -f "$AGE_ENCFILE" 2>/dev/null || true
+    fi
+
+    # SSH config encryption test (reuse AGE_PUBKEY + AGE_KEY)
+    SSH_TMPL="$REPO_DIR/private_dot_ssh/config.tmpl"
+    SSH_ENCFILE="/tmp/ssh-config-test-$$.age"
+    if [[ -f "$SSH_TMPL" ]]; then
+        if [[ "$MODE" == "local" ]]; then
+            age -r "$AGE_PUBKEY" -o "$SSH_ENCFILE" "$SSH_TMPL" 2>/dev/null \
+                && pass "SSH config: encrypted with age" || fail "SSH config: age encrypt failed"
+            age -d -i "$AGE_KEY" "$SSH_ENCFILE" 2>/dev/null | grep -q "Host github.com" \
+                && pass "SSH config: decrypt + content check OK" || fail "SSH config: decrypt or content mismatch"
+            rm -f "$SSH_ENCFILE"
+        else
+            incus file push "$SSH_TMPL" "$CONTAINER_NAME$SSH_ENCFILE" 2>/dev/null && true
+            incus exec "$CONTAINER_NAME" -- bash -c "age -r '$AGE_PUBKEY' -o '$SSH_ENCFILE.age' '$SSH_ENCFILE'" 2>/dev/null \
+                && pass "SSH config: encrypted with age" || fail "SSH config: age encrypt failed"
+            incus exec "$CONTAINER_NAME" -- bash -c "age -d -i '$AGE_KEY' '$SSH_ENCFILE.age' | grep -q 'Host github.com'" 2>/dev/null \
+                && pass "SSH config: decrypt + content check OK" || fail "SSH config: decrypt or content mismatch"
+            incus exec "$CONTAINER_NAME" -- rm -f "$SSH_ENCFILE" "$SSH_ENCFILE.age" 2>/dev/null || true
+        fi
+    else
+        fail "SSH config template not found at $SSH_TMPL"
+    fi
+else
+    warn "age command not found, skipping encryption tests"
+fi
+
 # ── macOS Template Validation ───────────────────────────────────────────────
 # Validates OS-conditional blocks: macOS content exists in source templates
 # AND is correctly excluded from Linux renders (no false inclusion).
@@ -451,7 +579,6 @@ macos_in_source_excluded_on_linux() {
 macos_in_source_excluded_on_linux "private_dot_ssh/config.tmpl" "lima-default"      "SSH: lima-default in source, excluded on Linux"
 macos_in_source_excluded_on_linux "private_dot_ssh/config.tmpl" "UseKeychain yes"    "SSH: UseKeychain in source, excluded on Linux"
 macos_in_source_excluded_on_linux "private_dot_ssh/config.tmpl" "colima"             "SSH: colima in source, excluded on Linux"
-macos_in_source_excluded_on_linux "dot_shell_profile.tmpl"    "'fd --type f"         "shell: macOS fd in source, excluded on Linux"
 macos_in_source_excluded_on_linux "dot_zshenv.tmpl"           'fd --type f'          "zshenv: macOS fd in source, excluded on Linux"
 macos_in_source_excluded_on_linux "dot_zshenv.tmpl"           "Tools/bin"            "zshenv: ~/Tools/bin in source, excluded on Linux"
 macos_in_source_excluded_on_linux "dot_zshenv.tmpl"           "pub-cache/bin"        "zshenv: Dart pub-cache in source, excluded on Linux"

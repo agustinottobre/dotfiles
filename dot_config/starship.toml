@@ -3,9 +3,9 @@
 # Increase timeout for slow/network filesystems
 scan_timeout = 200
 
-# Main prompt format: [username][hostname][shlvl][sudo][vim_status][directory][git_branch][git_status][python][nodejs][rust][golang][package][character]
+# Main prompt format: [username][hostname][shlvl][sudo][directory][git_branch][git_status][python][nodejs][rust][golang][package][character]
 format = """
-$username$hostname$shlvl$sudovimstatdirectory$git_branch$git_status$python$nodejs$rust$golang$package$character"""
+$username$hostname$shlvl$sudo$directory$git_branch$git_status$python$nodejs$rust$golang$package$character"""
 
 continuation_prompt = "[.](bright-black) "
 
@@ -150,7 +150,7 @@ truncation_symbol = "..."
 [hostname]
 ssh_only = false
 ssh_symbol = "ssh "
-detect_env_vars = ['!TMUX', 'SSH_CONNECTION']
+format = "[$hostname]($style) "
 
 [java]
 symbol = "java "
