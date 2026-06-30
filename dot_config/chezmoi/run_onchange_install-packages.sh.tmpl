@@ -8,6 +8,22 @@
 # set -e  # Disabled - we handle errors manually
 # set -o pipefail
 
+# Ensure git operations work (work around Homebrew git-remote-https crash on macOS:
+# dyld: Symbol not found: _curl_global_trace due to Homebrew/macOS libcurl mismatch)
+ensure_working_git() {
+    if [[ "$(uname -s)" != "Darwin" ]]; then
+        return 0
+    fi
+    local git_epath
+    git_epath=$(git --exec-path 2>/dev/null) || true
+    if [[ -n "$git_epath" && "$git_epath" != /usr/libexec/git-core ]]; then
+        if "$git_epath/git-remote-https" 2>&1 | grep -q "Symbol not found.*_curl_global_trace"; then
+            export PATH="/usr/bin:$PATH"
+            return 0
+        fi 2>/dev/null
+    fi
+}
+
 # Helper to check if a command exists
 command_exists() {
     command -v "$1" >/dev/null 2>&1
@@ -222,6 +238,7 @@ install_tpm() {
     fi
 
     echo "Installing TPM..."
+    ensure_working_git
     git clone -q https://github.com/tmux-plugins/tpm "$tpm_dir"
 }
 

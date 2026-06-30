@@ -169,6 +169,25 @@ echo "Applying dotfiles..."
 chezmoi apply --source "$REPO_DIR" --destination "$TEST_HOME" --force 2>&1 | grep -v "^$" | tail -3
 # Apply may have non-zero exit for non-critical issues, check files exist instead
 
+# Install TPM in test home (run_onchange script uses .chezmoi.homeDir which
+# resolves to the real home, so TPM must be cloned manually for testing)
+if [[ ! -d "$TEST_HOME/.tmux/plugins/tpm" ]]; then
+    # Work around Homebrew git-remote-https crash (see Zim init below)
+    # Use variable capture instead of pipe (set -o pipefail makes pipeline
+    # fail when git-remote-https crashes, hiding the grep match)
+    if [[ "$OSTYPE" == darwin* ]]; then
+        _git_epath=$(git --exec-path 2>/dev/null) || true
+        if [[ -n "$_git_epath" && "$_git_epath" != /usr/libexec/git-core ]]; then
+            _git_crash=$("$_git_epath/git-remote-https" 2>&1) || true
+            if echo "$_git_crash" | grep -q "Symbol not found.*_curl_global_trace"; then
+                PATH="/usr/bin:$PATH"
+            fi
+        fi
+    fi
+    mkdir -p "$TEST_HOME/.tmux/plugins"
+    git clone -q https://github.com/tmux-plugins/tpm "$TEST_HOME/.tmux/plugins/tpm" 2>/dev/null || true
+fi
+
 # Initialize Zim in test home
 if [[ -f "$TEST_HOME/.zimrc" ]]; then
     ZIM_HOME="$TEST_HOME/.zim"
@@ -177,7 +196,18 @@ if [[ -f "$TEST_HOME/.zimrc" ]]; then
         curl -fsSLo "$ZIM_HOME/zimfw.zsh" \
             https://github.com/zimfw/zimfw/releases/latest/download/zimfw.zsh 2>/dev/null || true
     fi
+
     ZIM_INIT_OUTPUT=$(HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" zsh -c "
+        # Work around Homebrew git-remote-https crash on macOS
+        # (dyld: Symbol not found: _curl_global_trace)
+        if [[ \"\$OSTYPE\" == darwin* ]]; then
+            _git_epath=\$(git --exec-path 2>/dev/null) || true
+            if [[ -n \"\$_git_epath\" && \"\$_git_epath\" != /usr/libexec/git-core ]]; then
+                if \"\$_git_epath/git-remote-https\" 2>&1 | grep -q 'Symbol not found.*_curl_global_trace'; then
+                    PATH=\"/usr/bin:\$PATH\"
+                fi 2>/dev/null
+            fi
+        fi
         ZIM_HOME='$ZIM_HOME'
         ZIM_CONFIG_FILE='$TEST_HOME/.zimrc'
         source '$ZIM_HOME/zimfw.zsh' init
@@ -411,7 +441,7 @@ fi
 
 # ── Bash Startup ────────────────────────────────────────────────────────────
 header "Bash startup"
-BASH_FZF=$(HOME="$TEST_HOME" bash -l -i -c 'echo $FZF_DEFAULT_COMMAND' 2>/dev/null || true)
+BASH_FZF=$(HOME="$TEST_HOME" bash -i -c 'echo $FZF_DEFAULT_COMMAND' 2>/dev/null || true)
 echo "$BASH_FZF" | grep -q "^fd " \
     && pass "bash FZF_DEFAULT_COMMAND uses fd" \
     || fail "bash FZF_DEFAULT_COMMAND not fd" "$BASH_FZF"

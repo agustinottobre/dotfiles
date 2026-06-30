@@ -51,6 +51,20 @@ path=(
 )
 
 #
+# Work around Homebrew git-remote-https crash on macOS
+# (dyld: Symbol not found: _curl_global_trace due to Homebrew/macOS libcurl mismatch)
+#
+if [[ "$OSTYPE" == darwin* ]]; then
+  _git_epath=$(git --exec-path 2>/dev/null) || true
+  if [[ -n "$_git_epath" && "$_git_epath" != /usr/libexec/git-core ]]; then
+    _git_crash=$("$_git_epath/git-remote-https" 2>&1) || true
+    if echo "$_git_crash" | grep -q "Symbol not found.*_curl_global_trace"; then
+      path=(/usr/bin $path)
+    fi
+  fi
+fi
+
+#
 # Less
 #
 
