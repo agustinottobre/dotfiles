@@ -96,7 +96,15 @@ alias ll='ls -lha'
 
 # Editors
 {{- if eq .chezmoi.os "darwin" }}
-NVIM_PATH='/usr/local/bin/nvim'
+if [[ -x /usr/local/bin/nvim ]]; then
+    NVIM_PATH='/usr/local/bin/nvim'
+elif [[ -x /opt/homebrew/bin/nvim ]]; then
+    NVIM_PATH='/opt/homebrew/bin/nvim'
+elif [[ -x "$HOME/.local/bin/nvim" ]]; then
+    NVIM_PATH="$HOME/.local/bin/nvim"
+else
+    NVIM_PATH='nvim'  # fallback to PATH lookup
+fi
 {{- else }}
 NVIM_PATH="$HOME/.local/bin/nvim"
 {{- end }}
@@ -299,7 +307,6 @@ function randmac() {
 # =============================================================================
 
 # FNM (Node Version Manager)
-{{- if eq .chezmoi.os "darwin" }}
 fnm() {
   unset -f fnm
   # Add FNM to PATH if not already present
@@ -308,16 +315,6 @@ fnm() {
   eval "$(fnm env)" 2>/dev/null
   fnm "$@"
 }
-{{- else }}
-fnm() {
-  unset -f fnm
-  # Add FNM to PATH if not already present
-  [[ ":$PATH:" != *":$FNM_DIR:"* ]] && export PATH="$FNM_DIR:$PATH"
-  # Initialize FNM shell environment
-  eval "$(fnm env)" 2>/dev/null
-  fnm "$@"
-}
-{{- end }}
 
 # SDKMAN (Java/Rust toolchain manager)
 sdk() {

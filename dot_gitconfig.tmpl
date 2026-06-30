@@ -1,6 +1,6 @@
 [user]
-  name = Agustin Ottobre
-	email = agustin.ottobre@gmail.com
+    name = {{ .git.userName | default "Agustin Ottobre" | quote }}
+    email = {{ .git.userEmail | default "agustin.ottobre@gmail.com" | quote }}
 [diff]
   tool = vimdiff
 [difftool]

@@ -25,3 +25,8 @@ packages:
     - tmux
     - git
     - task
+
+# Default git identity — override per-machine in chezmoi.toml [data] section
+git:
+  userName: Agustin Ottobre
+  userEmail: agustin.ottobre@gmail.com

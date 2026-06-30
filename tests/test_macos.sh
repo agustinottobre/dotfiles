@@ -453,7 +453,7 @@ echo "$BASH_FZF" | grep -q "^fd " \
 header "Template syntax"
 for f in $(find "$REPO_DIR" -name '*.tmpl' -not -path '*/.git/*' | sort); do
     rel="${f#$REPO_DIR/}"
-    chezmoi execute-template < "$f" >/dev/null 2>&1 \
+    chezmoi execute-template --source "$REPO_DIR" < "$f" >/dev/null 2>&1 \
         && pass "template OK: $rel" || fail "template FAIL: $rel"
 done
 

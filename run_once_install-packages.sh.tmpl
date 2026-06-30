@@ -60,7 +60,11 @@ fi
 if [ -f "$CHEZMOI_TOML" ] && [ -f "$KEY_FILE" ] && grep -q 'REPLACE_WITH_YOUR_AGE_PUBLIC_KEY' "$CHEZMOI_TOML" 2>/dev/null; then
     PUBKEY=$(grep 'public key:' "$KEY_FILE" 2>/dev/null | sed 's/.*public key: *//')
     if [ -n "$PUBKEY" ]; then
-        sed -i "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML" 2>/dev/null || sed -i "" "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML" 2>/dev/null || true
+        if [ "$(uname -s)" = "Darwin" ]; then
+            sed -i "" "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML"
+        else
+            sed -i "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML"
+        fi
     fi
 fi
 
@@ -134,12 +138,20 @@ fi
 if [ -f "$CHEZMOI_TOML" ] && [ -f "$KEY_FILE" ] && grep -q 'REPLACE_WITH_YOUR_AGE_PUBLIC_KEY' "$CHEZMOI_TOML" 2>/dev/null; then
     PUBKEY=$(grep 'public key:' "$KEY_FILE" 2>/dev/null | sed 's/.*public key: *//')
     if [ -n "$PUBKEY" ]; then
-        sed -i "" "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML" 2>/dev/null || sed -i "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML" 2>/dev/null || true
+        if [ "$(uname -s)" = "Darwin" ]; then
+            sed -i "" "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML"
+        else
+            sed -i "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML"
+        fi
     fi
 fi
 
 # ── Chezmoi zsh completions ────────────────────────────────────────────────
-COMP_DIR="/usr/local/share/zsh/site-functions"
+if command -v brew >/dev/null 2>&1; then
+    COMP_DIR="$(brew --prefix)/share/zsh/site-functions"
+else
+    COMP_DIR="/usr/local/share/zsh/site-functions"
+fi
 if [ ! -f "$COMP_DIR/_chezmoi" ]; then
     echo "Installing chezmoi completions..."
     mkdir -p "$COMP_DIR" || true

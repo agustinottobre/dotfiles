@@ -3,6 +3,7 @@
 
 # Non-dotfile project files
 README.md
+/.task/
 DOTFILES_STRATEGY.md
 /bootstrap.sh
 /macos_on_incus_potential_solution.txt
@@ -18,5 +19,5 @@ DOTFILES_STRATEGY.md
 # Template source files (already managed by chezmoi)
 {{ if ne .chezmoi.os "darwin" }}
 # Exclude macOS-only configs on non-macOS
-.skhdrc
+.config/skhd/skhdrc
 {{ end }}
