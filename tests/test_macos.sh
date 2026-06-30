@@ -428,6 +428,11 @@ check_grep ".config/nvim/init.lua" "unnamedplus" "nvim: clipboard=unnamedplus"
 # macOS clipboard tool
 pbcopy -help >/dev/null 2>&1 && pass "clipboard: pbcopy/pbpaste available" || warn "clipboard: pbcopy not found"
 
+# nvim: register \"+ exists
+nvim --headless -c 'lua vim.fn.setreg("+", "TESTREG"); local ok = vim.fn.getreg("+") == "TESTREG"; vim.cmd(ok and "quit" or "cquit")' 2>/dev/null \
+    && pass "nvim: \"+ register functional" \
+    || fail "nvim: \"+ register broken"
+
 header "Tmux config"
 check_dir ".tmux/plugins/tpm" "TPM plugin manager"
 check_grep ".tmux.conf" 'set -g mode-keys vi' 'tmux: vi mode'

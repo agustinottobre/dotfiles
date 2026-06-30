@@ -434,9 +434,15 @@ check_grep ".tmux.conf" 'set-clipboard on' 'tmux: set-clipboard on'
 check_grep ".tmux.conf" 'bind C-c run' 'tmux: clipboard copy bind (C-c)'
 check_grep ".tmux.conf" 'bind C-v run' 'tmux: clipboard paste bind (C-v)'
 check_grep ".config/nvim/init.lua" "unnamedplus" "nvim: clipboard=unnamedplus"
+
 # Clipboard tool (xsel or xclip) should be installed on Linux
 xsel --version >/dev/null 2>&1 || xclip -version >/dev/null 2>&1 \
     && pass "clipboard: xsel or xclip available" || warn "clipboard: neither xsel nor xclip found"
+
+# nvim: register "+ exists (system clipboard integration)
+nvim --headless -c 'lua vim.fn.setreg("+", "TESTREG"); local ok = vim.fn.getreg("+") == "TESTREG"; vim.cmd(ok and "quit" or "cquit")' 2>/dev/null \
+    && pass "nvim: \"+ register functional" \
+    || fail "nvim: \"+ register broken"
 
 header "Tmux config"
 if [[ "$MODE" == "local" ]]; then
