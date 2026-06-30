@@ -4,34 +4,22 @@
 -- See the kickstart.nvim README for more information
 
 -- ============================================================================
--- Clipboard: predictable yank/paste with system clipboard
+-- Clipboard: predictable yank/paste (macOS + Linux)
 -- ============================================================================
--- Without this, clipboard=unnamedplus causes deletes to overwrite the
--- system clipboard — yank something, delete a line, Cmd+V gives you
--- the deleted line instead of what you yanked.
+-- With clipboard=unnamedplus, every delete (d/x/c) overwrites the default
+-- paste register. Remap p/P to the yank register ("0) which is only
+-- populated by explicit y/y and never touched by deletes.
 --
--- This autocmd runs after every TextYankPost event and restores the
--- system clipboard ("+) from the yank register ("0) when a delete
--- or change operation occurs. The yank register is only populated
--- by explicit y/yy/Y operations, never by d/x/c.
+-- How Cmd/Ctrl+C/V interact:
+--   y/y         → copies to both "0 and system clipboard
+--   Cmd/Ctrl+C  → copies to system clipboard only (not to vim registers)
+--   Cmd/Ctrl+V  → pastes from system clipboard (uses "+ register)
+--   p/P          → pastes from "0 (yank register, never deleted text)
+--   "+p          → explicitly paste from system clipboard (Cmd/Ctrl+V text)
+--   ""p          → paste last deleted text
 --
--- Quick reference after this config:
---   y/p     = internal vim yank/paste (always what you copied)
---   Cmd+C/V = system clipboard (mirrors yanked text, not deleted)
---   "+y/"+p = force explicit system clipboard
---   ""p     = paste last deleted text (unnamed register)
-vim.api.nvim_create_autocmd('TextYankPost', {
-  desc = 'Keep system clipboard in sync with yank register',
-  group = vim.api.nvim_create_augroup('custom-yank-clipboard', { clear = true }),
-  pattern = '*',
-  callback = function()
-    if vim.v.event.operator == 'd' or vim.v.event.operator == 'c' then
-      vim.fn.setreg('+', vim.fn.getreg('0'))
-    end
-  end,
-})
-
--- p/P always paste from yank register (never from delete register)
+-- On macOS "+ and "* are identical (system pasteboard).
+-- On Linux "+ is Ctrl+C/V clipboard, "* is middle-click selection.
 vim.keymap.set({ 'n', 'v' }, 'p', '"0p', { desc = 'Paste last yanked text' })
 vim.keymap.set({ 'n', 'v' }, 'P', '"0P', { desc = 'Paste last yanked above' })
 
