@@ -1,10 +1,9 @@
 {{ if hasKey . "packages" }}{{ if eq .chezmoi.os "linux" }}#!/bin/bash
 # Package list hash: {{ include ".chezmoidata/packages.yaml" | sha256sum }}
-set -euo pipefail
 
 # ── System packages (apt) ──────────────────────────────────────────────────
 echo "=== Installing system packages ==="
-sudo apt-get update -qq
+sudo apt-get update -qq 2>/dev/null || true
 {{ range .packages.linux.apt -}}
 sudo apt-get install -y -qq {{ . | quote }} 2>/dev/null || echo "  (skipped: {{ . }})"
 {{ end -}}
@@ -12,39 +11,34 @@ sudo apt-get install -y -qq {{ . | quote }} 2>/dev/null || echo "  (skipped: {{ 
 # ── FNM (Node version manager) ─────────────────────────────────────────────
 if ! command -v fnm >/dev/null 2>&1; then
     echo "Installing FNM..."
-    curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir "{{ .chezmoi.homeDir }}/.fnm" --skip-shell
+    curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir "{{ .chezmoi.homeDir }}/.fnm" --skip-shell || true
 fi
 
 # ── Starship prompt ─────────────────────────────────────────────────────────
-install_starship() {
-    if command -v starship >/dev/null 2>&1; then return; fi
+if ! command -v starship >/dev/null 2>&1; then
     echo "Installing Starship..."
-    timeout 60 bash -c 'curl -sS https://starship.dev/install.sh | bash -s -- -y' 2>/dev/null && return
-    # Fallback: direct download
-    curl -fsSL "https://github.com/starship/starship/releases/latest/download/starship-$(uname -m)-unknown-linux-gnu.tar.gz" | tar -xzf - -C /usr/local/bin starship 2>/dev/null && chmod +x /usr/local/bin/starship
-}
-install_starship
+    timeout 60 bash -c 'curl -sS https://starship.dev/install.sh | bash -s -- -y' 2>/dev/null || {
+        curl -fsSL "https://github.com/starship/starship/releases/latest/download/starship-$(uname -m)-unknown-linux-gnu.tar.gz" 2>/dev/null | tar -xzf - -C /usr/local/bin starship 2>/dev/null && chmod +x /usr/local/bin/starship || true
+    }
+fi
 
 # ── Neovim (nightly AppImage) ──────────────────────────────────────────────
 install_neovim() {
     local nvim_bin="{{ .chezmoi.homeDir }}/.local/bin/nvim"
-    if command -v nvim >/dev/null 2>&1 && nvim --headless -c 'quit' 2>/dev/null; then return; fi
+    if command -v nvim >/dev/null 2>&1 && nvim --headless -c 'quit' 2>/dev/null; then return 0; fi
     echo "Installing Neovim (nightly)..."
-    mkdir -p "$(dirname "$nvim_bin")"
-    curl -fsSL -o "$nvim_bin" "https://github.com/neovim/neovim/releases/download/nightly/nvim-linux-x86_64.appimage"
-    chmod u+x "$nvim_bin"
-    # FUSE fallback
+    mkdir -p "$(dirname "$nvim_bin")" || true
+    curl -fsSL -o "$nvim_bin" "https://github.com/neovim/neovim/releases/download/nightly/nvim-linux-x86_64.appimage" || return 0
+    chmod u+x "$nvim_bin" || true
     if ! command -v fusermount3 >/dev/null 2>&1 && ! command -v fusermount >/dev/null 2>&1; then
         sudo apt-get install -y -qq fuse3 2>/dev/null || sudo apt-get install -y -qq fuse 2>/dev/null || true
     fi
-    # Try running; if FUSE fails, extract
     if ! "$nvim_bin" --version >/dev/null 2>&1; then
-        local old_pwd=$PWD; cd "$(dirname "$nvim_bin")"
-        "$nvim_bin" --appimage-extract 2>/dev/null && {
+        (cd "$(dirname "$nvim_bin")" && "$nvim_bin" --appimage-extract 2>/dev/null && {
             rm -rf nvim-extracted; mv squashfs-root nvim-extracted
             printf '#!/bin/bash\nexec "%s/.local/bin/nvim-extracted/AppRun" "$@"\n' "{{ .chezmoi.homeDir }}" > "$nvim_bin"
             chmod +x "$nvim_bin"
-        }; cd "$old_pwd"
+        }) || true
     fi
 }
 install_neovim
@@ -52,7 +46,7 @@ install_neovim
 # ── TPM (Tmux Plugin Manager) ──────────────────────────────────────────────
 if [ ! -d "{{ .chezmoi.homeDir }}/.tmux/plugins/tpm" ]; then
     echo "Installing TPM..."
-    git clone -q https://github.com/tmux-plugins/tpm "{{ .chezmoi.homeDir }}/.tmux/plugins/tpm"
+    git clone -q https://github.com/tmux-plugins/tpm "{{ .chezmoi.homeDir }}/.tmux/plugins/tpm" || true
 fi
 
 # ── Age key ─────────────────────────────────────────────────────────────────
@@ -60,20 +54,21 @@ KEY_FILE="{{ .chezmoi.homeDir }}/.config/chezmoi/key.txt"
 CHEZMOI_TOML="{{ .chezmoi.homeDir }}/.config/chezmoi/chezmoi.toml"
 if [ ! -f "$KEY_FILE" ]; then
     echo "Generating age key..."
-    mkdir -p "$(dirname "$KEY_FILE")"
-    chezmoi age-keygen --output="$KEY_FILE" 2>/dev/null
+    mkdir -p "$(dirname "$KEY_FILE")" || true
+    chezmoi age-keygen --output="$KEY_FILE" 2>/dev/null || true
 fi
-# Auto-populate recipient if placeholder exists
 if [ -f "$CHEZMOI_TOML" ] && [ -f "$KEY_FILE" ] && grep -q 'REPLACE_WITH_YOUR_AGE_PUBLIC_KEY' "$CHEZMOI_TOML" 2>/dev/null; then
     PUBKEY=$(grep 'public key:' "$KEY_FILE" 2>/dev/null | sed 's/.*public key: *//')
-    [ -n "$PUBKEY" ] && sed -i "" "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML" 2>/dev/null || sed -i "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML"
+    if [ -n "$PUBKEY" ]; then
+        sed -i "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML" 2>/dev/null || sed -i "" "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML" 2>/dev/null || true
+    fi
 fi
 
 # ── Chezmoi zsh completions ────────────────────────────────────────────────
 COMP_DIR="/usr/local/share/zsh/site-functions"
 if [ ! -f "$COMP_DIR/_chezmoi" ]; then
     echo "Installing chezmoi completions..."
-    mkdir -p "$COMP_DIR"
+    mkdir -p "$COMP_DIR" || true
     chezmoi completion zsh > "$COMP_DIR/_chezmoi" 2>/dev/null || true
 fi
 
@@ -81,12 +76,11 @@ echo "=== Setup Complete ==="
 
 {{ else if eq .chezmoi.os "darwin" }}#!/bin/bash
 # Package list hash: {{ include ".chezmoidata/packages.yaml" | sha256sum }}
-set -euo pipefail
 
 # ── System packages (Homebrew) ─────────────────────────────────────────────
 echo "=== Installing system packages ==="
 if command -v brew >/dev/null 2>&1; then
-    brew update -q
+    brew update -q 2>/dev/null || true
 {{ range .packages.darwin.brew -}}
     brew install -q {{ . | quote }} 2>/dev/null || echo "  (skipped: {{ . }})"
 {{ end -}}
@@ -95,7 +89,7 @@ fi
 # ── FNM (Node version manager) ─────────────────────────────────────────────
 if ! command -v fnm >/dev/null 2>&1; then
     echo "Installing FNM..."
-    curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir "{{ .chezmoi.homeDir }}/.fnm" --skip-shell
+    curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir "{{ .chezmoi.homeDir }}/.fnm" --skip-shell || true
 fi
 
 # ── Starship prompt ─────────────────────────────────────────────────────────
@@ -106,15 +100,15 @@ fi
 
 # ── Neovim (nightly) ───────────────────────────────────────────────────────
 install_neovim_macos() {
-    if command -v nvim >/dev/null 2>&1 && nvim --headless -c 'quit' 2>/dev/null; then return; fi
+    if command -v nvim >/dev/null 2>&1 && nvim --headless -c 'quit' 2>/dev/null; then return 0; fi
     echo "Installing Neovim (nightly)..."
     local arch; arch=$(uname -m)
     local nvim_arch; [ "$arch" = "arm64" ] && nvim_arch="arm64" || nvim_arch="x86_64"
     local tmp_dir="{{ .chezmoi.homeDir }}/.local/bin"
-    mkdir -p "$tmp_dir"
+    mkdir -p "$tmp_dir" || true
     local archive="$tmp_dir/nvim-macos.tar.gz"
-    curl -fsSL -o "$archive" "https://github.com/neovim/neovim/releases/download/nightly/nvim-macos-${nvim_arch}.tar.gz"
-    tar -xzf "$archive" -C "$tmp_dir"; rm -f "$archive"
+    curl -fsSL -o "$archive" "https://github.com/neovim/neovim/releases/download/nightly/nvim-macos-${nvim_arch}.tar.gz" || return 0
+    tar -xzf "$archive" -C "$tmp_dir" 2>/dev/null || true; rm -f "$archive"
     local extracted_dir="$tmp_dir/nvim-macos-${nvim_arch}"
     if [ -d "$extracted_dir/bin" ]; then
         printf '#!/bin/bash\nexport PATH="%s/bin:$PATH"\nexec "%s/bin/nvim" "$@"\n' "$extracted_dir" "$extracted_dir" > "$tmp_dir/nvim"
@@ -126,7 +120,7 @@ install_neovim_macos
 # ── TPM (Tmux Plugin Manager) ──────────────────────────────────────────────
 if [ ! -d "{{ .chezmoi.homeDir }}/.tmux/plugins/tpm" ]; then
     echo "Installing TPM..."
-    git clone -q https://github.com/tmux-plugins/tpm "{{ .chezmoi.homeDir }}/.tmux/plugins/tpm"
+    git clone -q https://github.com/tmux-plugins/tpm "{{ .chezmoi.homeDir }}/.tmux/plugins/tpm" || true
 fi
 
 # ── Age key ─────────────────────────────────────────────────────────────────
@@ -134,19 +128,21 @@ KEY_FILE="{{ .chezmoi.homeDir }}/.config/chezmoi/key.txt"
 CHEZMOI_TOML="{{ .chezmoi.homeDir }}/.config/chezmoi/chezmoi.toml"
 if [ ! -f "$KEY_FILE" ]; then
     echo "Generating age key..."
-    mkdir -p "$(dirname "$KEY_FILE")"
-    chezmoi age-keygen --output="$KEY_FILE" 2>/dev/null
+    mkdir -p "$(dirname "$KEY_FILE")" || true
+    chezmoi age-keygen --output="$KEY_FILE" 2>/dev/null || true
 fi
 if [ -f "$CHEZMOI_TOML" ] && [ -f "$KEY_FILE" ] && grep -q 'REPLACE_WITH_YOUR_AGE_PUBLIC_KEY' "$CHEZMOI_TOML" 2>/dev/null; then
     PUBKEY=$(grep 'public key:' "$KEY_FILE" 2>/dev/null | sed 's/.*public key: *//')
-    [ -n "$PUBKEY" ] && sed -i "" "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML" 2>/dev/null || sed -i "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML"
+    if [ -n "$PUBKEY" ]; then
+        sed -i "" "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML" 2>/dev/null || sed -i "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML" 2>/dev/null || true
+    fi
 fi
 
 # ── Chezmoi zsh completions ────────────────────────────────────────────────
 COMP_DIR="/usr/local/share/zsh/site-functions"
 if [ ! -f "$COMP_DIR/_chezmoi" ]; then
     echo "Installing chezmoi completions..."
-    mkdir -p "$COMP_DIR"
+    mkdir -p "$COMP_DIR" || true
     chezmoi completion zsh > "$COMP_DIR/_chezmoi" 2>/dev/null || true
 fi
 
