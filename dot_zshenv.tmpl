@@ -3,12 +3,13 @@
 # Zsh Environment - sourced for all shell types
 # =============================================================================
 
-{{- if eq .chezmoi.os "linux" }}
-# On Linux, FPATH may be inherited from bash, which replaces zsh's default
-# fpath. This removes essential functions like is-at-least and add-zsh-hook
-# that Zim requires. Unset FPATH to let zsh use compiled-in defaults, then
-# ensure system zsh function dirs are present in fpath.
+# FPATH in the environment (e.g. inherited from bash or parent process) will
+# replace zsh's compiled-in default fpath, dropping essential functions like
+# is-at-least that Zim requires. Unset it to restore the defaults.
 unset FPATH
+{{- if eq .chezmoi.os "linux" }}
+# On Linux, also ensure the system zsh function dirs are explicitly in fpath
+# in case the compiled-in defaults don't include them (e.g. Debian).
 if [[ "${fpath[*]}" != *"functions/Misc"* ]]; then
   local _zfn_base
   for _zfn_base in /usr/share/zsh/functions /usr/share/zsh/*/functions; do
