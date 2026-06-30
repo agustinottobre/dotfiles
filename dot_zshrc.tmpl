@@ -77,12 +77,14 @@ disable r
 
 # =============================================================================
 # Git compdefs (after completions are loaded)
-compdef wiki=git
-# Optional: use chezmoi completions for config() if available, git otherwise
-if (( ${+functions[_chezmoi]} )); then
-  compdef config=chezmoi
-else
-  compdef config=git
+if (( ${+commands[compdef]} )); then
+  compdef wiki=git
+  # Optional: use chezmoi completions for config() if available, git otherwise
+  if (( ${+functions[_chezmoi]} )); then
+    compdef config=chezmoi
+  else
+    compdef config=git
+  fi
 fi
 
 # =============================================================================
@@ -267,7 +269,12 @@ function k3dconfigwall(){
 
 # Kubernetes config
 function kubeconfigRefresh() {
-  export KUBECONFIG=$(find "$HOME/.kube" "$HOME/.config/k3d" -name "config*" -o -name "kubeconfig*" | awk '{printf "%s:", $0} END {print ""}')
+  local kube_dirs=()
+  [[ -d "$HOME/.kube" ]] && kube_dirs+=("$HOME/.kube")
+  [[ -d "$HOME/.config/k3d" ]] && kube_dirs+=("$HOME/.config/k3d")
+  if [[ ${#kube_dirs[@]} -gt 0 ]]; then
+    export KUBECONFIG=$(find "${kube_dirs[@]}" -name "config*" -o -name "kubeconfig*" | awk '{printf "%s:", $0} END {print ""}')
+  fi
 }
 kubeconfigRefresh
 {{- end }}

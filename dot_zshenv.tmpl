@@ -66,11 +66,11 @@ fi
 # Apple Silicon Mac (Homebrew): /opt/homebrew/share/zsh/site-functions
 # Linux (custom builds): may need manual addition
 # Only prepend if the path exists AND is not already in fpath.
-if (( ! ${fpath[(I)/usr/local/share/zsh/site-functions]} )) && [[ -d /usr/local/share/zsh/site-functions ]]; then
+if [[ -n "${fpath}" ]] && (( ! ${fpath[(I)/usr/local/share/zsh/site-functions]} )) && [[ -d /usr/local/share/zsh/site-functions ]]; then
   fpath=(/usr/local/share/zsh/site-functions ${fpath})
 fi
 {{- if eq .chezmoi.os "darwin" }}
-if (( ! ${fpath[(I)/opt/homebrew/share/zsh/site-functions]} )) && [[ -d /opt/homebrew/share/zsh/site-functions ]]; then
+if [[ -n "${fpath}" ]] && (( ! ${fpath[(I)/opt/homebrew/share/zsh/site-functions]} )) && [[ -d /opt/homebrew/share/zsh/site-functions ]]; then
   fpath=(/opt/homebrew/share/zsh/site-functions ${fpath})
 fi
 {{- end }}

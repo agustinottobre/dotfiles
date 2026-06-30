@@ -21,7 +21,21 @@ elif [[ -f ~/.fzf.bash ]]; then
   source ~/.fzf.bash
 fi
 {{- else }}
-[[ -f ~/.fzf.bash ]] && source ~/.fzf.bash
+# macOS (Homebrew) paths
+if [[ -f /opt/homebrew/opt/fzf/shell/key-bindings.bash ]]; then
+  source /opt/homebrew/opt/fzf/shell/key-bindings.bash
+elif [[ -f /usr/local/opt/fzf/shell/key-bindings.bash ]]; then
+  source /usr/local/opt/fzf/shell/key-bindings.bash
+elif [[ -f ~/.fzf.bash ]]; then
+  source ~/.fzf.bash
+fi
+{{- end }}
+
+# FZF default command (bash doesn't source .zshenv)
+{{- if eq .chezmoi.os "linux" }}
+export FZF_DEFAULT_COMMAND='fdfind --type f --hidden --follow --exclude .git'
+{{- else }}
+export FZF_DEFAULT_COMMAND='fd --type f --hidden --follow --exclude .git'
 {{- end }}
 if [ -f "$HOME/.cargo/env" ]; then
     . "$HOME/.cargo/env"

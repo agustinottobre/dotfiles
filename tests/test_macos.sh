@@ -351,11 +351,13 @@ check_file ".config/nvim/lua/custom/plugins/init.lua" "nvim custom plugins"
 # nvim basic functionality and config syntax
 nvim --headless -c 'quit' 2>/dev/null && pass "nvim: headless startup OK" || warn "nvim: headless startup failed"
 if [[ -f "$TEST_HOME/.config/nvim/init.lua" ]]; then
-    nvim -u NONE --headless --cmd "lua local ok, err = load(io.open('$TEST_HOME/.config/nvim/init.lua'):read('*a')); if ok then print('SYNTAX_OK') else print('SYNTAX_FAIL: '..err) end" -c 'cq' 2>&1 | grep -q SYNTAX_OK \
+    SYNTAX_RESULT=$(timeout 10 nvim -u NONE --headless --cmd "lua local ok, err = load(io.open('$TEST_HOME/.config/nvim/init.lua'):read('*a')); if ok then print('SYNTAX_OK') else print('SYNTAX_FAIL: '..err) end" -c 'cq' 2>&1) || true
+    echo "$SYNTAX_RESULT" | grep -q SYNTAX_OK \
         && pass "nvim: init.lua Lua syntax OK" || fail "nvim: init.lua Lua syntax error"
 fi
 if [[ -f "$TEST_HOME/.config/nvim/lua/custom/plugins/init.lua" ]]; then
-    nvim -u NONE --headless --cmd "lua local ok, err = load(io.open('$TEST_HOME/.config/nvim/lua/custom/plugins/init.lua'):read('*a')); if ok then print('SYNTAX_OK') else print('SYNTAX_FAIL: '..err) end" -c 'cq' 2>&1 | grep -q SYNTAX_OK \
+    SYNTAX_RESULT=$(timeout 10 nvim -u NONE --headless --cmd "lua local ok, err = load(io.open('$TEST_HOME/.config/nvim/lua/custom/plugins/init.lua'):read('*a')); if ok then print('SYNTAX_OK') else print('SYNTAX_FAIL: '..err) end" -c 'cq' 2>&1) || true
+    echo "$SYNTAX_RESULT" | grep -q SYNTAX_OK \
         && pass "nvim: custom plugins Lua syntax OK" || fail "nvim: custom plugins Lua syntax error"
 fi
 # nvim: confirm no hard errors at startup (vim.lsp.config needs nvim >= 0.11)
