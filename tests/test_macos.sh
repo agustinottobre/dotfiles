@@ -464,8 +464,8 @@ if command -v age >/dev/null 2>&1; then
             fail "age: no public key in key.txt"
         fi
 
-        # Verify recipient is NOT the placeholder
-        if [[ -f "$TEST_HOME/.config/chezmoi/chezmoi.toml" ]] && grep -q 'REPLACE_WITH_YOUR_AGE_PUBLIC_KEY' "$TEST_HOME/.config/chezmoi/chezmoi.toml" 2>/dev/null; then
+        # Verify recipient is NOT the placeholder (check host config)
+        if [[ -f "$HOME/.config/chezmoi/chezmoi.toml" ]] && grep -q 'REPLACE_WITH_YOUR_AGE_PUBLIC_KEY' "$HOME/.config/chezmoi/chezmoi.toml" 2>/dev/null; then
             fail "age: recipient still has placeholder in chezmoi.toml"
         else
             pass "age: recipient configured in chezmoi.toml"
