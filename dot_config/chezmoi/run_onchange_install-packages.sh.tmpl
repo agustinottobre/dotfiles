@@ -237,38 +237,35 @@ install_age_key() {
     local key_file="{{ .chezmoi.homeDir }}/.config/chezmoi/key.txt"
     local chezmoi_toml="{{ .chezmoi.homeDir }}/.config/chezmoi/chezmoi.toml"
 
-    if [ -f "$key_file" ]; then
-        echo "Age key already exists at $key_file"
-    else
+    # Generate key if missing
+    if [ ! -f "$key_file" ]; then
         if command -v chezmoi >/dev/null 2>&1; then
             echo "Generating age key with chezmoi age-keygen..."
             mkdir -p "$(dirname "$key_file")"
-            # chezmoi age-keygen outputs to --output path and prints public key to stdout
-            local pubkey
-            pubkey=$(chezmoi age-keygen --output="$key_file" 2>/dev/null)
+            chezmoi age-keygen --output="$key_file" 2>/dev/null
             if [ -f "$key_file" ]; then
                 echo "Age key generated at $key_file"
-
-                # Auto-populate 'recipient' in chezmoi.toml if it has the placeholder
-                if [ -f "$chezmoi_toml" ] && grep -q 'REPLACE_WITH_YOUR_AGE_PUBLIC_KEY' "$chezmoi_toml" 2>/dev/null; then
-                    # Extract public key from the generated identity file
-                    # age identity files have format: AGE IDENTITY 1\n<private_key>\n\nPublic key: age1...\n
-                    local actual_pubkey
-                    actual_pubkey=$(grep 'public key:' "$key_file" 2>/dev/null | sed 's/.*public key: *//')
-                    if [ -n "$actual_pubkey" ]; then
-                        sed -i "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$actual_pubkey/" "$chezmoi_toml"
-                        echo "Auto-filled 'recipient' in chezmoi.toml with public key: $actual_pubkey"
-                    else
-                        echo "WARNING: Could not extract public key from $key_file"
-                        echo "Please manually replace 'REPLACE_WITH_YOUR_AGE_PUBLIC_KEY' in $chezmoi_toml"
-                    fi
-                fi
             else
                 echo "WARNING: chezmoi age-keygen failed. Install age manually."
             fi
         else
             echo "WARNING: chezmoi not found. Cannot generate age key."
             echo "Install chezmoi first, then run: chezmoi age-keygen --output=$key_file"
+        fi
+    else
+        echo "Age key already exists at $key_file"
+    fi
+
+    # Always auto-populate the recipient if it's still the placeholder
+    if [ -f "$chezmoi_toml" ] && [ -f "$key_file" ] && grep -q 'REPLACE_WITH_YOUR_AGE_PUBLIC_KEY' "$chezmoi_toml" 2>/dev/null; then
+        local actual_pubkey
+        actual_pubkey=$(grep 'public key:' "$key_file" 2>/dev/null | sed 's/.*public key: *//')
+        if [ -n "$actual_pubkey" ]; then
+            sed -i "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$actual_pubkey/" "$chezmoi_toml"
+            echo "Auto-filled 'recipient' in chezmoi.toml with public key: $actual_pubkey"
+        else
+            echo "WARNING: Could not extract public key from $key_file"
+            echo "Please manually replace 'REPLACE_WITH_YOUR_AGE_PUBLIC_KEY' in $chezmoi_toml"
         fi
     fi
 }

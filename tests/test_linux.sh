@@ -517,6 +517,17 @@ if exec_cmd "command -v age" >/dev/null 2>&1; then
         fail "age: no public key in key.txt"
     fi
 
+    # Verify recipient is NOT the placeholder
+    AGE_TOML="${TARGET_HOME}/.config/chezmoi/chezmoi.toml"
+    if [[ "$MODE" == "local" ]]; then
+        AGE_TOML="$HOME/.config/chezmoi/chezmoi.toml"
+    fi
+    if [[ -f "$AGE_TOML" ]] && grep -q 'REPLACE_WITH_YOUR_AGE_PUBLIC_KEY' "$AGE_TOML" 2>/dev/null; then
+        fail "age: recipient still has placeholder in chezmoi.toml"
+    else
+        pass "age: recipient configured in chezmoi.toml"
+    fi
+
     # Encrypt → Decrypt roundtrip
     AGE_TESTDATA="dotfiles-age-roundtrip-$$"
     AGE_ENCFILE="/tmp/age-test-$$.age"
