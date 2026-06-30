@@ -434,6 +434,7 @@ check_grep ".tmux.conf" 'set-clipboard on' 'tmux: set-clipboard on'
 check_grep ".tmux.conf" 'bind C-c run' 'tmux: clipboard copy bind (C-c)'
 check_grep ".tmux.conf" 'bind C-v run' 'tmux: clipboard paste bind (C-v)'
 check_grep ".config/nvim/init.lua" "unnamedplus" "nvim: clipboard=unnamedplus"
+check_grep ".config/nvim/init.lua" '"0p' "nvim: p/P paste from yank register (not delete)"
 # Clipboard tool (xsel or xclip) should be installed on Linux
 xsel --version >/dev/null 2>&1 || xclip -version >/dev/null 2>&1 \
     && pass "clipboard: xsel or xclip available" || warn "clipboard: neither xsel nor xclip found"

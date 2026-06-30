@@ -325,6 +325,15 @@ vim.keymap.set('n', '<C-k>', '<C-w><C-k>', { desc = 'Move focus to the upper win
 -- [[ Basic Autocommands ]]
 --  See `:help lua-guide-autocommands`
 
+-- Prevent delete/cut from overwriting yanked text.
+-- With clipboard=unnamedplus, every delete goes to the system clipboard
+-- and the paste register, making p/P paste deleted text instead of
+-- what you actually yanked. Remap p/P to the yank register ("0) which
+-- is only populated by explicit yank/y operations.
+vim.keymap.set({ 'n', 'v' }, 'p', '"0p', { desc = 'Paste last yanked (not deleted) text' })
+vim.keymap.set({ 'n', 'v' }, 'P', '"0P', { desc = 'Paste last yanked text above cursor' })
+-- Use gp/gP or ""p for the default behavior (paste last deleted text)
+
 -- Highlight when yanking (copying) text
 --  Try it with `yap` in normal mode
 --  See `:help vim.hl.on_yank()`
