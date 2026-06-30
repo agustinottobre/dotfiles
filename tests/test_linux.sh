@@ -351,6 +351,13 @@ header "Installed tools"
 check_cmd "zsh"; check_cmd "tmux"; check_cmd "git"; check_cmd "fzf"
 check_cmd "rg" "rg (ripgrep)"; check_cmd "age"; check_cmd "chezmoi"
 
+# chezmoi doctor — verify chezmoi itself is healthy
+if [[ "$MODE" == "local" ]]; then
+    chezmoi doctor 2>&1 | grep -q 'error' && fail "chezmoi doctor has errors" || pass "chezmoi doctor: no errors"
+else
+    exec_cmd "chezmoi doctor 2>/dev/null | grep -q error" && fail "chezmoi doctor has errors" || pass "chezmoi doctor: no errors"
+fi
+
 # nvim
 if [[ "$MODE" == "local" ]]; then
     which nvim >/dev/null 2>&1 && pass "nvim: $(nvim --version 2>&1 | head -1)" || fail "nvim not found"

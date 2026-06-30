@@ -1,0 +1,22 @@
+# chezmoiignore — exclude non-dotfile files from chezmoi management
+# chezmoi installs everything by default, so we list what to IGNORE.
+
+# Non-dotfile project files
+README.md
+DOTFILES_STRATEGY.md
+/bootstrap.sh
+/macos_on_incus_potential_solution.txt
+
+# Tests and docs (not deployed to home)
+/tests/
+/DOCS/
+/macos-scripts/
+
+# Themes (not deployed as dotfiles)
+/themes/
+
+# Template source files (already managed by chezmoi)
+{{ if ne .chezmoi.os "darwin" }}
+# Exclude macOS-only configs on non-macOS
+.skhdrc
+{{ end }}
