@@ -946,3 +946,81 @@ incus start macos-test
              CpuTscSync, AMFIPass, AppleALC
     - SSDTs: SSDT-PLUG, SSDT-EC, SSDT-UNC, SSDT-RTC0-RANGE
 
+
+══════════════════════════════════════════════════════════════════
+FINAL STATUS: macOS on Incus — Complete Guide (2026-06-30)
+══════════════════════════════════════════════════════════════════
+
+## macOS Version Compatibility
+
+| Version | Boot | Install | Userspace | Keyboard | Notes |
+|---------|------|---------|-----------|----------|-------|
+| Monterey (12.x) | ✅ | ✅ | ✅ | ✅ (EHCI) | Works fully. Proven. |
+| Ventura (13.x) | ✅ | ✅ | ✅ | ✅ (EHCI) | Works. No code signing issues. |
+| Sonoma (14.x) | ⚠️ | ? | ? | ? | Needs OCLP post-install for CPU patches |
+| Sequoia (15.5, June 2026) | ✅ | ❌ | ❌ | — | _csblob_entitlements panic. Awaiting AMFIPass update. |
+
+## VNC Access (Post-Install)
+
+After enabling Screen Sharing in macOS System Settings:
+
+```bash
+# On Incus host:
+socat TCP-LISTEN:5900,reuseaddr,fork TCP:<VM-IP>:5900 &
+
+# From Mac:
+Finder → Connect to Server → vnc://<host-ip>:5900
+```
+
+Keyboard works natively via VNC (unlike SPICE web console).
+
+## GPU Passthrough
+
+Server has 2× NVIDIA RTX 3060. Cannot be used with macOS — Apple
+dropped NVIDIA support. Only AMD GPUs work (RX 580/6600/6800).
+
+Without GPU passthrough, all display is CPU-rendered. VNC is usable
+but slow. SSH is fast — use for terminal work.
+
+## Accessibility Keyboard (Setup Workaround)
+
+If keyboard doesn't work in setup: enable Accessibility Keyboard from
+the setup screen. Click keys with mouse. One-time use — not needed
+after Screen Sharing is enabled.
+
+## Critical Raw.qemu (DO NOT CHANGE)
+
+```
+-device usb-ehci,id=ehci
+-device usb-kbd,bus=ehci.0
+-device usb-tablet,bus=ehci.0
+-global ICH9-LPC.acpi-pci-hotplug-with-bridge-support=off
+-cpu Haswell-noTSX,kvm=on,vendor=GenuineIntel,+invtsc,vmware-cpuid-freq=on,+ssse3,+sse4.2,+popcnt,+avx,+avx2,+aes,+xsave,+xsaveopt,check
+-device isa-applesmc,osk=ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc
+-smbios type=2
+```
+
+DO NOT:
+- Add second qemu-xhci (breaks display)
+- Remove ICH9-LPC hotplug disable (breaks display)
+- Add i8042 (crashes QEMU)
+- Switch to Skylake-Client CPU (not in Incus QEMU)
+- Add -device VGA or virtio-gpu (conflicts with SPICE)
+
+## Disk Space
+
+macOS Ventura installed needs ~25GB. Total artifacts:
+- macOS target disk: /var/lib/incus/macos-target.img (~30GB installed)
+- OpenCore boot: /tmp/opencore-kvm-raw.img (150MB)
+- Recovery images: ~3GB each (can delete after install)
+- Orchard firmware: ~3GB (can delete)
+
+Total minimum: ~55GB
+
+## Host Prerequisites (One-Time)
+
+```bash
+echo 1 > /sys/module/kvm/parameters/ignore_msrs
+echo "options kvm ignore_msrs=1" >> /etc/modprobe.d/kvm.conf
+```
+
