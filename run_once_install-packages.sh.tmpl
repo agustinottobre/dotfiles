@@ -79,8 +79,7 @@ fi
 
 echo "=== Setup Complete ==="
 
-{{- else if eq .chezmoi.os "darwin" }}
-#!/bin/bash
+{{ else if eq .chezmoi.os "darwin" }}#!/bin/bash
 # Package list hash: {{ include ".chezmoidata/packages.yaml" | sha256sum }}
 set -euo pipefail
 
