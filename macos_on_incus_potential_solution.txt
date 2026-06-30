@@ -809,3 +809,140 @@ Also enable verbose boot to see panic messages:
 Verbose boot shows scrolling kernel messages instead of prohibited symbol.
 MacOS recovery progresses to language selection → Utilities screen.
 
+
+══════════════════════════════════════════════════════════════════
+SUCCESS: macOS Monterey Installing on Incus (2026-06-30)
+══════════════════════════════════════════════════════════════════
+
+## Final Working Configuration
+
+### Keyboard: Use EHCI controller (USB 2.0), NOT xhci
+
+Root cause: AppleUSBXHCI driver has a known HID interrupt bug with QEMU's
+xhci emulation. Keyboard enumerates but HID reports never deliver keystrokes
+(`keyboard: 0` in IORegistry). Fix: use EHCI (USB 2.0) controller with
+different PCI ID (8086:7020) — no PCI topology conflict with Incus's xhci.
+
+### Display: Keep ICH9-LPC PCI hotplug disabled
+
+`-global ICH9-LPC.acpi-pci-hotplug-with-bridge-support=off` prevents macOS
+from trying to hotplug PCI devices, which shifts GPU address and causes
+"Display output is not active" black screen.
+
+### Complete raw.qemu
+
+```
+-device usb-ehci,id=ehci
+-device usb-kbd,bus=ehci.0
+-device usb-tablet,bus=ehci.0
+-global ICH9-LPC.acpi-pci-hotplug-with-bridge-support=off
+-cpu Haswell-noTSX,kvm=on,vendor=GenuineIntel,+invtsc,vmware-cpuid-freq=on,+ssse3,+sse4.2,+popcnt,+avx,+avx2,+aes,+xsave,+xsaveopt,check
+-device isa-applesmc,osk=ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc
+-smbios type=2
+```
+
+### Complete Incus VM Recipe (from scratch)
+
+```bash
+# Prerequisites (host one-time)
+echo 1 > /sys/module/kvm/parameters/ignore_msrs
+echo "options kvm ignore_msrs=1" >> /etc/modprobe.d/kvm.conf
+
+# Step 1: Download KVM-Opencore ISO
+wget https://github.com/user-attachments/files/23098001/OpenCore-master.iso.gz
+gunzip OpenCore-master.iso.gz
+
+# Step 2: Download macOS Monterey
+cd /tmp && git clone --depth 1 https://github.com/kholia/OSX-KVM
+cd OSX-KVM && python3 fetch-macOS-v2.py -s monterey
+dmg2img BaseSystem.dmg BaseSystem.img
+
+# Step 3: Patch OpenCore config (see full config below)
+# Mount ISO, edit EFI/OC/config.plist, add kexts, repack as raw
+qemu-img convert -f raw -O raw OpenCore-master.iso opencore.raw.img
+
+# Step 4: Create target disk
+qemu-img create -f raw /var/lib/incus/macos-target.img 60G
+
+# Step 5: Create Incus profile + VM
+incus profile create macos-minimal 2>/dev/null || true
+incus profile device add macos-minimal root disk pool=default path=/
+incus profile set macos-minimal security.secureboot=false
+
+incus init macos-test --vm --empty -p macos-minimal -c image.os=macOS
+
+# Step 6: Attach disks
+incus config device add macos-test opencore disk \
+  source=/tmp/opencore.raw.img boot.priority=15
+incus config device add macos-test recovery disk \
+  source=/tmp/OSX-KVM/BaseSystem.img io.bus=nvme
+incus config device add macos-test target disk \
+  source=/var/lib/incus/macos-target.img io.bus=nvme
+
+# Step 7: Network
+incus network attach incusbr0 macos-test eth0
+
+# Step 8: QEMU args (THE CRITICAL PART)
+incus config set macos-test raw.qemu="
+-device usb-ehci,id=ehci
+-device usb-kbd,bus=ehci.0
+-device usb-tablet,bus=ehci.0
+-global ICH9-LPC.acpi-pci-hotplug-with-bridge-support=off
+-cpu Haswell-noTSX,kvm=on,vendor=GenuineIntel,+invtsc,vmware-cpuid-freq=on,+ssse3,+sse4.2,+popcnt,+avx,+avx2,+aes,+xsave,+xsaveopt,check
+-device isa-applesmc,osk=ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc
+-smbios type=2
+"
+
+# Step 9: Boot and install
+incus start macos-test
+# Incus web GUI → macos-test → Console → VGA
+# OpenCore picker → select macOS Base System (Monterey)
+# Wait ~2 min for GUI (ignore service crash noise)
+# Language selection → Disk Utility → Erase NVMe disk as APFS → Install
+# Wait ~30-60 min for installation
+```
+
+## Key Lessons (Do NOT Forget)
+
+1. **EHCI for keyboard, not xhci** — AppleUSBXHCI has HID bug with QEMU.
+   EHCI uses different PCI ID, no display conflict.
+
+2. **ICH9-LPC hotplug must be disabled** — prevents PCI topology shift
+   that breaks SPICE display.
+
+3. **Do NOT add second qemu-xhci** — Incus already has one. Second xhci
+   shifts PCI addresses and breaks display.
+
+4. **Haswell-noTSX CPU** — Incus QEMU doesn't have Skylake-Client.
+   Penryn lacks AVX2. Haswell-noTSX has AVX2 and works.
+
+5. **Monterey, not Sequoia** — macOS 15.5 (June 2026 kernel) has strict
+   code signing that current bypasses (AMFIPass, amfi_get_out_of_my_way)
+   cannot handle. Monterey (12.x) works reliably.
+
+6. **ignore_msrs=1 on host** — mandatory. Prevents KVM from injecting
+   #GP faults on unknown MSRs from Xeon.
+
+7. **All 3 disks must be NVMe** — Incus sandbox blocks SATA/AHCI.
+   NVMe works natively. io.bus=nvme on all disk devices.
+
+8. **Keyboard may not work in recovery installer** — this is OK.
+   The full macOS has more drivers. Post-install SSH is the solution
+   if keyboard still fails after installation completes.
+
+9. **Use thenickdude KVM-Opencore ISO** — NOT orchard-compiled OpenCore.
+   Orchard's OpenCore is incompatible with modern macOS in QEMU.
+
+10. **Full config.plist MUST include:**
+    - Cpuid1Data: F2060300 (Haswell-EP E5-2678 v3)
+    - All Xeon quirks: AppleCpuPmCfgLock, AppleXcpmCfgLock,
+      AppleXcpmExtraMsrs, AppleXcpmForceBoost, PanicNoKextDump
+    - DevirtualiseMmio=True, AvoidRuntimeDefrag=True
+    - SetupVirtualMap=False, SecureBootModel=Disabled
+    - boot-args: -v -no_compat_check dart=0 npci=0x2000
+    - csr-active-config: FF070000
+    - SMBIOS: iMacPro1,1 (Mac-7BA5B2D9E42DDD94)
+    - Kexts: Lilu, VirtualSMC, WhateverGreen, AppleMCEReporterDisabler,
+             CpuTscSync, AMFIPass, AppleALC
+    - SSDTs: SSDT-PLUG, SSDT-EC, SSDT-UNC, SSDT-RTC0-RANGE
+
