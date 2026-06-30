@@ -456,11 +456,16 @@ echo "$BASH_FZF" | grep -q "fdfind" && pass "bash FZF uses fdfind" || fail "bash
 
 header "Bin scripts"
 if [[ "$MODE" == "local" ]]; then
-    ls "$TARGET_HOME/bin/" 2>/dev/null | wc -l | xargs -I{} bash -c '[ {} -ge 7 ]' \
-        && pass "bin scripts present" || warn "bin scripts fewer than expected"
+    BIN_COUNT=$(ls "$TARGET_HOME/bin/" 2>/dev/null | wc -l)
+    [[ "$BIN_COUNT" -ge 7 ]] && pass "bin scripts present ($BIN_COUNT)" || warn "bin scripts fewer than expected ($BIN_COUNT)"
+    # Verify scripts are executable
+    NONEXEC=$(find "$TARGET_HOME/bin/" -name '*.sh' ! -perm -100 2>/dev/null | wc -l)
+    [[ "$NONEXEC" -eq 0 ]] && pass "bin scripts executable" || fail "bin scripts not executable ($NONEXEC)"
 else
     exec_cmd "ls $TARGET_HOME/bin/ | wc -l" | xargs -I{} bash -c '[ {} -ge 7 ]' \
         && pass "bin scripts present" || warn "bin scripts fewer than expected"
+    exec_cmd "find $TARGET_HOME/bin/ -name '*.sh' ! -perm -100 | wc -l" | xargs -I{} bash -c '[ {} -eq 0 ]' \
+        && pass "bin scripts executable" || fail "bin scripts not executable"
 fi
 
 header "Template syntax (host)"
