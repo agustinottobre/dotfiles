@@ -65,12 +65,11 @@ bind-key -Tcopy-mode-vi 'Bspace' send -X halfpage-up
 # Clipboard Integration (OS-agnostic)
 # =============================================================================
 
-# Try xsel (Linux) first, then pbcopy/pbpaste (macOS)
-if-shell 'command -v xsel >/dev/null 2>&1' \
-    "bind C-c run 'tmux save-buffer -b %%.0 - | xsel -ib' ; bind C-v run 'tmux set-buffer \"$(xsel -ob)\"; tmux paste-buffer'" \
-    "if-shell 'command -v pbcopy >/dev/null 2>&1' \
-        \"bind C-c run 'tmux save-buffer -b %%.0 - | pbcopy' ; bind C-v run 'tmux set-buffer \"$(pbpaste)\"; tmux paste-buffer'\" \
-        ''"
+# Copy to system clipboard (C-c in normal mode)
+bind C-c run "tmux save-buffer - | if command -v pbcopy >/dev/null 2>&1; then pbcopy; elif command -v xclip >/dev/null 2>&1; then xclip -selection clipboard; elif command -v xsel >/dev/null 2>&1; then xsel -ib; fi"
+
+# Paste from system clipboard (C-v in normal mode)
+bind C-v run "tmux set-buffer \"$(if command -v pbpaste >/dev/null 2>&1; then pbpaste; elif command -v xclip >/dev/null 2>&1; then xclip -selection clipboard -o 2>/dev/null; elif command -v xsel >/dev/null 2>&1; then xsel -ob; fi)\"; tmux paste-buffer"
 
 # =============================================================================
 # Smart Pane Switching (with Neovim awareness)

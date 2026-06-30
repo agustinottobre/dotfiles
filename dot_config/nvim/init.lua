@@ -184,7 +184,8 @@ vim.diagnostic.config {
   virtual_lines = false, -- Teest shows up underneath the line, with virtual lines
 
   -- Auto open the float, so you can easily read the errors when jumping with `[d` and `]d`
-  jump = { float = true },
+  -- jump.float is deprecated in nvim 0.12+, use vim.diagnostic.jump() instead
+  -- jump = { float = true },
 }
 
 -- ============================================================
