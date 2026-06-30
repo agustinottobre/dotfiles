@@ -137,9 +137,19 @@ echo ""
 
 # ── Pre-flight ──────────────────────────────────────────────────────────────
 header "Pre-flight checks"
-check_cmd "chezmoi"
 check_cmd "zsh"
 check_cmd "bash"
+
+# Install chezmoi if missing
+if ! command -v chezmoi >/dev/null 2>&1; then
+    echo "chezmoi not found. Installing..."
+    curl -sSL https://get.chezmoi.io | sh -s -- -b /usr/local/bin 2>/dev/null || {
+        echo "ERROR: Could not install chezmoi. Install manually: https://chezmoi.dev"
+        exit 1
+    }
+    echo "chezmoi installed."
+fi
+pass "chezmoi: $(chezmoi --version 2>&1 | head -1)"
 
 # ═════════════════════════════════════════════════════════════════════════════
 #  PHASE 1: Apply dotfiles to test home
@@ -148,7 +158,7 @@ header "Applying dotfiles to isolated test home"
 
 # chezmoi needs a source directory. Initialize if not already present.
 # We use a throwaway chezmoi state dir to avoid conflicts with real config.
-CHEZMOI_STATE="$TEST_HOME/.test-che zmoi-state"
+CHEZMOI_STATE="$TEST_HOME/.test-chezmoi-state"
 mkdir -p "$CHEZMOI_STATE"
 
 echo "Initializing chezmoi..."
