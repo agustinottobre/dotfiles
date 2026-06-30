@@ -6,13 +6,16 @@
 # When FPATH is set in the environment (e.g., inherited from bash),
 # zsh uses it to INITIALIZE fpath, REPLACING the default system fpath
 # that provides is-at-least, add-zsh-hook, compinit, etc.
-unset FPATH
-if [[ "${fpath[*]}" != *"functions/Misc"* ]]; then
-  local _zfn_base
-  for _zfn_base in /usr/share/zsh/functions /usr/share/zsh/*/functions; do
-    [[ -d ${_zfn_base}/Misc ]] && fpath=(${_zfn_base}/{Misc,Completion,Completion/{Base,Linux,Unix,Zsh},Prompts,Zle,VCS_Info} ${fpath}) && break
-  done
-  unset _zfn_base
+# Only fix this if is-at-least is actually missing.
+if ! zmodload -F zsh/parameter p:functions_source 2>/dev/null || ! (( ${+functions[is-at-least]} )); then
+  unset FPATH
+  if [[ "${fpath[*]}" != *"functions/Misc"* ]]; then
+    local _zfn_base
+    for _zfn_base in /usr/share/zsh/functions /usr/share/zsh/*/functions{{ if eq .chezmoi.os "darwin" }} /usr/share/zsh/[0-9]*/functions{{ end }}; do
+      [[ -d ${_zfn_base}/Misc ]] && fpath=(${_zfn_base}/{Misc,Completion,Completion/{Base,Linux,Unix,Zsh},Prompts,Zle,VCS_Info} ${fpath}) && break
+    done
+    unset _zfn_base
+  fi
 fi
 
 # Cargo/Rust - auto-injected by ~/.cargo/env on most systems

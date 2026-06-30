@@ -452,41 +452,46 @@ fi
 # ── Age Encryption Roundtrip ─────────────────────────────────────────────────
 header "Age encryption roundtrip"
 if command -v age >/dev/null 2>&1; then
-    AGE_KEY="$TEST_HOME/.config/chezmoi/key.txt"
-    AGE_PUBKEY=$(grep 'public key:' "$AGE_KEY" 2>/dev/null | sed 's/.*public key: *//')
-    if [[ -n "$AGE_PUBKEY" ]]; then
-        pass "age: key pair found"
+    # Use the host's age key (test home doesn't have its own)
+    AGE_KEY="$HOME/.config/chezmoi/key.txt"
+    if [[ ! -f "$AGE_KEY" ]]; then
+        fail "age: no key found at $AGE_KEY"
     else
-        fail "age: no public key in key.txt"
-    fi
+        AGE_PUBKEY=$(grep 'public key:' "$AGE_KEY" 2>/dev/null | sed 's/.*public key: *//') || true
+        if [[ -n "$AGE_PUBKEY" ]]; then
+            pass "age: key pair found"
+        else
+            fail "age: no public key in key.txt"
+        fi
 
-    # Verify recipient is NOT the placeholder
-    if [[ -f "$TEST_HOME/.config/chezmoi/chezmoi.toml" ]] && grep -q 'REPLACE_WITH_YOUR_AGE_PUBLIC_KEY' "$TEST_HOME/.config/chezmoi/chezmoi.toml" 2>/dev/null; then
-        fail "age: recipient still has placeholder in chezmoi.toml"
-    else
-        pass "age: recipient configured in chezmoi.toml"
-    fi
+        # Verify recipient is NOT the placeholder
+        if [[ -f "$TEST_HOME/.config/chezmoi/chezmoi.toml" ]] && grep -q 'REPLACE_WITH_YOUR_AGE_PUBLIC_KEY' "$TEST_HOME/.config/chezmoi/chezmoi.toml" 2>/dev/null; then
+            fail "age: recipient still has placeholder in chezmoi.toml"
+        else
+            pass "age: recipient configured in chezmoi.toml"
+        fi
 
-    AGE_TESTDATA="dotfiles-age-roundtrip-$$"
-    AGE_ENCFILE="/tmp/age-test-$$.age"
-    echo "$AGE_TESTDATA" | age -r "$AGE_PUBKEY" -o "$AGE_ENCFILE" 2>/dev/null \
-        && pass "age: encrypt OK" || fail "age: encrypt failed"
-    age -d -i "$AGE_KEY" "$AGE_ENCFILE" 2>/dev/null | grep -q "$AGE_TESTDATA" \
-        && pass "age: decrypt roundtrip OK" || fail "age: decrypt roundtrip mismatch"
-    rm -f "$AGE_ENCFILE"
+        AGE_TESTDATA="dotfiles-age-roundtrip-$$"
+        AGE_ENCFILE="/tmp/age-test-$$.age"
+        echo "$AGE_TESTDATA" | age -r "$AGE_PUBKEY" -o "$AGE_ENCFILE" 2>/dev/null \
+            && pass "age: encrypt OK" || fail "age: encrypt failed"
+        age -d -i "$AGE_KEY" "$AGE_ENCFILE" 2>/dev/null | grep -q "$AGE_TESTDATA" \
+            && pass "age: decrypt roundtrip OK" || fail "age: decrypt roundtrip mismatch"
+        rm -f "$AGE_ENCFILE"
 
-    # SSH config encryption
-    SSH_TMPL="$REPO_DIR/private_dot_ssh/config.tmpl"
-    SSH_ENCFILE="/tmp/ssh-config-test-$$.age"
-    if [[ -f "$SSH_TMPL" ]]; then
-        age -r "$AGE_PUBKEY" -o "$SSH_ENCFILE" "$SSH_TMPL" 2>/dev/null \
-            && pass "SSH config: encrypted with age" || fail "SSH config: age encrypt failed"
-        age -d -i "$AGE_KEY" "$SSH_ENCFILE" 2>/dev/null | grep -q "Host github.com" \
-            && pass "SSH config: decrypt + content check OK" || fail "SSH config: decrypt or content mismatch"
-        rm -f "$SSH_ENCFILE"
-    else
-        fail "SSH config template not found at $SSH_TMPL"
-    fi
+        # SSH config encryption
+        SSH_TMPL="$REPO_DIR/private_dot_ssh/config.tmpl"
+        SSH_ENCFILE="/tmp/ssh-config-test-$$.age"
+        if [[ -f "$SSH_TMPL" ]]; then
+            age -r "$AGE_PUBKEY" -o "$SSH_ENCFILE" "$SSH_TMPL" 2>/dev/null \
+                && pass "SSH config: encrypted with age" || fail "SSH config: age encrypt failed"
+            age -d -i "$AGE_KEY" "$SSH_ENCFILE" 2>/dev/null | grep -q "Host github.com" \
+                && pass "SSH config: decrypt + content check OK" || fail "SSH config: decrypt or content mismatch"
+            rm -f "$SSH_ENCFILE"
+        else
+            fail "SSH config template not found at $SSH_TMPL"
+        fi
+    fi  # end of age-key-exists block
 else
     warn "age command not found, skipping encryption tests"
 fi
