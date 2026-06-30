@@ -57,7 +57,7 @@ zsh_test() {
 
 # Run bash in isolated test home
 bash_test() {
-    HOME="$TEST_HOME" bash -l -i -c "$1" 2>&1 || true
+    HOME="$TEST_HOME" bash -i -c "$1" 2>&1 || true
 }
 
 check_file() {
@@ -160,18 +160,31 @@ header "Applying dotfiles to isolated test home"
 # We use a throwaway chezmoi state dir to avoid conflicts with real config.
 CHEZMOI_STATE="$TEST_HOME/.test-chezmoi-state"
 mkdir -p "$CHEZMOI_STATE"
+CHEZMOI_PERSISTENT_STATE="$CHEZMOI_STATE/chezmoi.boltdb"
 
 echo "Initializing chezmoi..."
 chezmoi init --source "$REPO_DIR" --destination "$TEST_HOME" --config-path "$CHEZMOI_STATE/chezmoi.toml" --force 2>&1 | tail -1 \
     && pass "chezmoi init OK" || { fail "chezmoi init failed"; exit 1; }
+echo "persistentState = \"$CHEZMOI_PERSISTENT_STATE\"" >> "$CHEZMOI_STATE/chezmoi.toml"
 
 echo "Applying dotfiles..."
-chezmoi apply --source "$REPO_DIR" --destination "$TEST_HOME" --force 2>&1 | grep -v "^$" | tail -3
+chezmoi --config "$CHEZMOI_STATE/chezmoi.toml" apply --source "$REPO_DIR" --destination "$TEST_HOME" --force 2>&1 | grep -v "^$" | tail -3
 # Apply may have non-zero exit for non-critical issues, check files exist instead
 
 # Install TPM in test home (run_once script uses .chezmoi.homeDir which
 # resolves to the real home, so TPM must be cloned manually for testing)
 if [[ ! -d "$TEST_HOME/.tmux/plugins/tpm" ]]; then
+    # Work around Homebrew git-remote-https crash on macOS
+    # (dyld: Symbol not found: _curl_global_trace)
+    if [[ "$OSTYPE" == darwin* ]]; then
+        _git_epath=$(git --exec-path 2>/dev/null) || true
+        if [[ -n "$_git_epath" && "$_git_epath" != /usr/libexec/git-core ]]; then
+            _git_crash=$("$_git_epath/git-remote-https" 2>&1) || true
+            if echo "$_git_crash" | grep -q "Symbol not found.*_curl_global_trace"; then
+                PATH="/usr/bin:$PATH"
+            fi
+        fi
+    fi
     mkdir -p "$TEST_HOME/.tmux/plugins"
     git clone -q https://github.com/tmux-plugins/tpm "$TEST_HOME/.tmux/plugins/tpm" 2>/dev/null || true
 fi
@@ -186,6 +199,20 @@ if [[ -f "$TEST_HOME/.zimrc" ]]; then
     fi
 
     ZIM_INIT_OUTPUT=$(HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" zsh -c "
+        # Work around Homebrew git-remote-https crash on macOS
+        if [[ \"\$OSTYPE\" == darwin* ]]; then
+            _git_epath=\$(git --exec-path 2>/dev/null) || true
+            if [[ -n \"\$_git_epath\" && \"\$_git_epath\" != /usr/libexec/git-core ]]; then
+                _git_crash=\$(\"\$_git_epath/git-remote-https\" 2>&1) || true
+                if echo \"\$_git_crash\" | grep -q 'Symbol not found.*_curl_global_trace'; then
+                    PATH=\"/usr/bin:\$PATH\"
+                fi
+            fi
+        fi
+        ZIM_HOME='$ZIM_HOME'
+        ZIM_CONFIG_FILE='$TEST_HOME/.zimrc'
+        source '$ZIM_HOME/zimfw.zsh' init
+    " 2>&1) || true
     if [[ -f "$ZIM_HOME/init.zsh" ]]; then
         pass "zim initialized in test home"
     else
