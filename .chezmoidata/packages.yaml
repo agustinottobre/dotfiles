@@ -1,0 +1,27 @@
+# OS-specific package lists. Add packages here to install them on next apply.
+# The run_once_install-packages.sh.tmpl script reads this file.
+packages:
+  linux:
+    apt:
+    - build-essential
+    - git
+    - curl
+    - wget
+    - zsh
+    - tmux
+    - xsel
+    - ripgrep
+    - unzip
+    - fzf
+    - fd-find
+    - age
+    - task
+  darwin:
+    brew:
+    - ripgrep
+    - fzf
+    - fd
+    - age
+    - tmux
+    - git
+    - task

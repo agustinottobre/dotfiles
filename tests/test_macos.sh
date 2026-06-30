@@ -169,21 +169,9 @@ echo "Applying dotfiles..."
 chezmoi apply --source "$REPO_DIR" --destination "$TEST_HOME" --force 2>&1 | grep -v "^$" | tail -3
 # Apply may have non-zero exit for non-critical issues, check files exist instead
 
-# Install TPM in test home (run_onchange script uses .chezmoi.homeDir which
+# Install TPM in test home (run_once script uses .chezmoi.homeDir which
 # resolves to the real home, so TPM must be cloned manually for testing)
 if [[ ! -d "$TEST_HOME/.tmux/plugins/tpm" ]]; then
-    # Work around Homebrew git-remote-https crash (see Zim init below)
-    # Use variable capture instead of pipe (set -o pipefail makes pipeline
-    # fail when git-remote-https crashes, hiding the grep match)
-    if [[ "$OSTYPE" == darwin* ]]; then
-        _git_epath=$(git --exec-path 2>/dev/null) || true
-        if [[ -n "$_git_epath" && "$_git_epath" != /usr/libexec/git-core ]]; then
-            _git_crash=$("$_git_epath/git-remote-https" 2>&1) || true
-            if echo "$_git_crash" | grep -q "Symbol not found.*_curl_global_trace"; then
-                PATH="/usr/bin:$PATH"
-            fi
-        fi
-    fi
     mkdir -p "$TEST_HOME/.tmux/plugins"
     git clone -q https://github.com/tmux-plugins/tpm "$TEST_HOME/.tmux/plugins/tpm" 2>/dev/null || true
 fi
@@ -198,20 +186,6 @@ if [[ -f "$TEST_HOME/.zimrc" ]]; then
     fi
 
     ZIM_INIT_OUTPUT=$(HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" zsh -c "
-        # Work around Homebrew git-remote-https crash on macOS
-        # (dyld: Symbol not found: _curl_global_trace)
-        if [[ \"\$OSTYPE\" == darwin* ]]; then
-            _git_epath=\$(git --exec-path 2>/dev/null) || true
-            if [[ -n \"\$_git_epath\" && \"\$_git_epath\" != /usr/libexec/git-core ]]; then
-                if \"\$_git_epath/git-remote-https\" 2>&1 | grep -q 'Symbol not found.*_curl_global_trace'; then
-                    PATH=\"/usr/bin:\$PATH\"
-                fi 2>/dev/null
-            fi
-        fi
-        ZIM_HOME='$ZIM_HOME'
-        ZIM_CONFIG_FILE='$TEST_HOME/.zimrc'
-        source '$ZIM_HOME/zimfw.zsh' init
-    " 2>&1) || true
     if [[ -f "$ZIM_HOME/init.zsh" ]]; then
         pass "zim initialized in test home"
     else
