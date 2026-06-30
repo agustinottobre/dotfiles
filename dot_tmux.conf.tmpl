@@ -56,7 +56,7 @@ bind v split-window -h -c "#{pane_current_path}"
 # Copy mode vi bindings
 bind Escape copy-mode
 bind-key -Tcopy-mode-vi 'v' send -X begin-selection
-bind-key -Tcopy-mode-vi 'y' send -X copy-selection-and-cancel
+bind-key -Tcopy-mode-vi 'y' send -X copy-selection
 bind-key -Tcopy-mode-vi 'r' send -X rectangle-toggle
 bind-key -Tcopy-mode-vi 'Space' send -X halfpage-down
 bind-key -Tcopy-mode-vi 'Bspace' send -X halfpage-up

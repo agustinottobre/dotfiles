@@ -420,6 +420,14 @@ git_test config diff.tool 2>/dev/null | grep -q 'vimdiff' \
     && pass "git diff.tool = vimdiff" || fail "git diff.tool not vimdiff"
 
 # ── Tmux ────────────────────────────────────────────────────────────────────
+# Clipboard integration
+check_grep ".tmux.conf" 'set-clipboard on' 'tmux: set-clipboard on'
+check_grep ".tmux.conf" 'bind C-c run' 'tmux: clipboard copy bind (C-c)'
+check_grep ".tmux.conf" 'bind C-v run' 'tmux: clipboard paste bind (C-v)'
+check_grep ".config/nvim/init.lua" "unnamedplus" "nvim: clipboard=unnamedplus"
+# macOS clipboard tool
+pbcopy -help >/dev/null 2>&1 && pass "clipboard: pbcopy/pbpaste available" || warn "clipboard: pbcopy not found"
+
 header "Tmux config"
 check_dir ".tmux/plugins/tpm" "TPM plugin manager"
 check_grep ".tmux.conf" 'set -g mode-keys vi' 'tmux: vi mode'

@@ -429,6 +429,15 @@ else
     exec_cmd 'git config alias.d | grep -q difftool' && pass "git alias.d = difftool" || fail "git alias.d missing"
 fi
 
+# Check clipboard tooling
+check_grep ".tmux.conf" 'set-clipboard on' 'tmux: set-clipboard on'
+check_grep ".tmux.conf" 'bind C-c run' 'tmux: clipboard copy bind (C-c)'
+check_grep ".tmux.conf" 'bind C-v run' 'tmux: clipboard paste bind (C-v)'
+check_grep ".config/nvim/init.lua" "unnamedplus" "nvim: clipboard=unnamedplus"
+# Clipboard tool (xsel or xclip) should be installed on Linux
+xsel --version >/dev/null 2>&1 || xclip -version >/dev/null 2>&1 \
+    && pass "clipboard: xsel or xclip available" || warn "clipboard: neither xsel nor xclip found"
+
 header "Tmux config"
 if [[ "$MODE" == "local" ]]; then
     dir_test ".tmux/plugins/tpm" && pass "TPM plugin manager" || warn "TPM plugin manager (run 'git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm' to install)"
