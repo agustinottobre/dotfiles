@@ -226,7 +226,7 @@ check_file ".config/nvim/init.lua"
 check_file ".config/starship.toml"
 check_file ".config/alacritty/alacritty.toml"
 check_file ".config/ranger/rc.conf"
-check_file ".config/skhd/skhdrc"
+# skhdrc is macOS-only — excluded via .chezmoiignore on Linux
 check_file ".config/lvim/config.lua"
 check_dir  ".config/nvim/lua/custom/plugins"
 
@@ -478,7 +478,7 @@ fi
 header "Template syntax (host)"
 for f in $(find "$REPO_DIR" -name '*.tmpl' -not -path '*/.git/*' | sort); do
     rel="${f#$REPO_DIR/}"
-    chezmoi execute-template < "$f" >/dev/null 2>&1 \
+    chezmoi execute-template --source "$REPO_DIR" < "$f" >/dev/null 2>&1 \
         && pass "template OK: $rel" || fail "template FAIL: $rel"
 done
 
