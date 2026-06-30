@@ -20,8 +20,15 @@
 --
 -- On macOS "+ and "* are identical (system pasteboard).
 -- On Linux "+ is Ctrl+C/V clipboard, "* is middle-click selection.
-vim.keymap.set({ 'n', 'v' }, 'p', '"0p', { desc = 'Paste last yanked text' })
-vim.keymap.set({ 'n', 'v' }, 'P', '"0P', { desc = 'Paste last yanked above' })
+--
+-- Uses v:register to only intercept plain p/P (no explicit register).
+-- "ap still pastes from register a, ""p from unnamed, "+p from clipboard.
+vim.keymap.set({ 'n', 'v' }, 'p', function()
+  return vim.v.register == '"' and '"0p' or '"' .. vim.v.register .. 'p'
+end, { expr = true, desc = 'Paste yanked text (or specified register)' })
+vim.keymap.set({ 'n', 'v' }, 'P', function()
+  return vim.v.register == '"' and '"0P' or '"' .. vim.v.register .. 'P'
+end, { expr = true, desc = 'Paste yanked above (or specified register)' })
 
 return {
 
