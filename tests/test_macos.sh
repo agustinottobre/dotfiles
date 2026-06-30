@@ -47,10 +47,9 @@ fail()   { echo -e "  ${RED}✗${NC} $1 — ${2:-}"; FAIL=$((FAIL + 1)); }
 warn()   { echo -e "  ${YELLOW}⚠${NC} $1 — ${2:-}"; WARN=$((WARN + 1)); }
 header() { echo ""; echo -e "${CYAN}── $1 ──${NC}"; }
 
-# Run zsh in isolated test home — clear FPATH to prevent inherited env
-# from replacing zsh's compiled-in fpath defaults (which breaks is-at-least)
+# Run zsh in isolated test home
 zsh_test() {
-    HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" FPATH= zsh -l -i -c "$1" 2>&1 \
+    HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" zsh -l -i -c "$1" 2>&1 \
         | grep -v "can't change option: zle" \
         | grep -v "Detected a new version" \
         || true
@@ -178,7 +177,7 @@ if [[ -f "$TEST_HOME/.zimrc" ]]; then
         curl -fsSLo "$ZIM_HOME/zimfw.zsh" \
             https://github.com/zimfw/zimfw/releases/latest/download/zimfw.zsh 2>/dev/null || true
     fi
-    ZIM_INIT_OUTPUT=$(HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" FPATH= zsh -c "
+    ZIM_INIT_OUTPUT=$(HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" zsh -c "
         ZIM_HOME='$ZIM_HOME'
         ZIM_CONFIG_FILE='$TEST_HOME/.zimrc'
         source '$ZIM_HOME/zimfw.zsh' init
@@ -402,7 +401,7 @@ check_file ".config/chezmoi/chezmoi.toml" "chezmoi config"
 
 # ── Zsh Startup ─────────────────────────────────────────────────────────────
 header "Zsh startup sanity"
-ZSH_OUT=$(HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" FPATH= zsh -l -i -c 'echo OK' 2>&1 || true)
+ZSH_OUT=$(HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" zsh -l -i -c 'echo OK' 2>&1 || true)
 ZSH_CLEAN=$(echo "$ZSH_OUT" | grep -iv "can't change option: zle" | grep -iv "Detected a new version" | grep -iv "Regenerated completions" || true)
 if echo "$ZSH_CLEAN" | grep -qiE "error|command not found|no such file|permission denied|unknown command"; then
     fail "zsh startup has errors" "$(echo "$ZSH_CLEAN" | grep -iE 'error|not found|no such|denied' | head -5)"
