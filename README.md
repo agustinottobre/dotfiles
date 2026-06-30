@@ -151,15 +151,17 @@ chezmoi state delete-bucket --bucket=scriptState
 
 ## Clipboard (nvim + tmux)
 
+Uses [kickstart.nvim](https://github.com/nvim-lua/kickstart.nvim) defaults: `clipboard=unnamedplus` syncs all yank/delete/paste with the system clipboard.
+
 | Action | What it does | OS |
 |--------|-------------|-----|
 | `y` / `yy` in nvim | Copies to system clipboard | both |
-| `p` / `P` in nvim | Pastes yanked text (not deleted) | both |
-| `d` / `x` in nvim | Deletes — does NOT overwrite your `y` | both |
-| `Cmd+C` / `Ctrl+C` | Copies from terminal to system clipboard | macOS / Linux |
-| `Cmd+V` / `Ctrl+V` | Pastes from system clipboard into terminal | macOS / Linux |
-| `"+p` in nvim | Paste from system clipboard (Cmd+V text) | both |
-| `C-c` in tmux copy mode | Copies tmux selection to system clipboard | both |
-| `C-v` in tmux normal mode | Pastes from system clipboard | both |
+| `d` / `x` in nvim | Deletes — also goes to clipboard | both |
+| `p` / `P` in nvim | Pastes from clipboard (last yank or delete) | both |
+| `"0p` in nvim | Paste from yank register (ignores deletes) | both |
+| `Cmd+C` / `Ctrl+Shift+C` | Copy from terminal to system clipboard | macOS / Linux |
+| `Cmd+V` / `Ctrl+Shift+V` | Paste from system clipboard into terminal | macOS / Linux |
+| `C-c` in tmux | Copy tmux selection to system clipboard | both |
+| `C-v` in tmux | Paste from system clipboard | both |
 
-**How it works**: `p` is remapped to `"0p` — the yank register (`"0`) is only populated by `y`, never by `d`/`x`/`c`. System clipboard (`"+"`) syncs on `y` but stays independent of deletes. On macOS `"+"` and `"*"` are identical; on Linux `"+"` is Ctrl+C/V clipboard and `"*"` is middle-click selection.
+**Tip**: If a delete overwrites your yank, use `"0p` to paste what you yanked (the `"0` register only holds explicit yanks, never deletes).

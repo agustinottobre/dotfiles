@@ -425,13 +425,6 @@ check_grep ".tmux.conf" 'set-clipboard on' 'tmux: set-clipboard on'
 check_grep ".tmux.conf" 'bind C-c run' 'tmux: clipboard copy bind (C-c)'
 check_grep ".tmux.conf" 'bind C-v run' 'tmux: clipboard paste bind (C-v)'
 check_grep ".config/nvim/init.lua" "unnamedplus" "nvim: clipboard=unnamedplus"
-if [[ -f "$TEST_HOME/.config/nvim/lua/custom/plugins/init.lua" ]]; then
-    grep -q '"0p' "$TEST_HOME/.config/nvim/lua/custom/plugins/init.lua" 2>/dev/null \
-        && pass "nvim: p/P paste from yank register" \
-        || fail "nvim: p/P paste from yank register missing"
-else
-    check_grep ".config/nvim/init.lua" '"0p' "nvim: p/P paste from yank register"
-fi
 # macOS clipboard tool
 pbcopy -help >/dev/null 2>&1 && pass "clipboard: pbcopy/pbpaste available" || warn "clipboard: pbcopy not found"
 

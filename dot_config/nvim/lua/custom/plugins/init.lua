@@ -3,33 +3,6 @@
 --
 -- See the kickstart.nvim README for more information
 
--- ============================================================================
--- Clipboard: predictable yank/paste (macOS + Linux)
--- ============================================================================
--- With clipboard=unnamedplus, every delete (d/x/c) overwrites the default
--- paste register. Remap p/P to the yank register ("0) which is only
--- populated by explicit y/y and never touched by deletes.
---
--- How Cmd/Ctrl+C/V interact:
---   y/y         → copies to both "0 and system clipboard
---   Cmd/Ctrl+C  → copies to system clipboard only (not to vim registers)
---   Cmd/Ctrl+V  → pastes from system clipboard (uses "+ register)
---   p/P          → pastes from "0 (yank register, never deleted text)
---   "+p          → explicitly paste from system clipboard (Cmd/Ctrl+V text)
---   ""p          → paste last deleted text
---
--- On macOS "+ and "* are identical (system pasteboard).
--- On Linux "+ is Ctrl+C/V clipboard, "* is middle-click selection.
---
--- Uses v:register to only intercept plain p/P (no explicit register).
--- "ap still pastes from register a, ""p from unnamed, "+p from clipboard.
-vim.keymap.set({ 'n', 'v' }, 'p', function()
-  return vim.v.register == '"' and '"0p' or '"' .. vim.v.register .. 'p'
-end, { expr = true, desc = 'Paste yanked text (or specified register)' })
-vim.keymap.set({ 'n', 'v' }, 'P', function()
-  return vim.v.register == '"' and '"0P' or '"' .. vim.v.register .. 'P'
-end, { expr = true, desc = 'Paste yanked above (or specified register)' })
-
 return {
 
   ---- ============================================================
