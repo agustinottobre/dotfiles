@@ -177,12 +177,16 @@ if [[ -f "$TEST_HOME/.zimrc" ]]; then
         curl -fsSLo "$ZIM_HOME/zimfw.zsh" \
             https://github.com/zimfw/zimfw/releases/latest/download/zimfw.zsh 2>/dev/null || true
     fi
-    HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" zsh -c "
+    ZIM_INIT_OUTPUT=$(HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" zsh -c "
         ZIM_HOME='$ZIM_HOME'
         ZIM_CONFIG_FILE='$TEST_HOME/.zimrc'
         source '$ZIM_HOME/zimfw.zsh' init
-    " 2>/dev/null || true
-    pass "zim initialized in test home"
+    " 2>&1) || true
+    if [[ -f "$ZIM_HOME/init.zsh" ]]; then
+        pass "zim initialized in test home"
+    else
+        fail "zim init failed" "$(echo "$ZIM_INIT_OUTPUT" | head -3)"
+    fi
 fi
 
 # ═════════════════════════════════════════════════════════════════════════════
