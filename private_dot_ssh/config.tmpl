@@ -1,7 +1,7 @@
 # =============================================================================
 # SSH Config — ENCRYPTED
 # =============================================================================
-# ENCRYPTED FILE — managed by chezmoi with age encryption.
+# PRIVATE FILE — managed by chezmoi (permissions 0600).
 #
 # ⚠️  KEY ROTATION: When you rotate your age key:
 #    1. Edit this file: chezmoi edit ~/.ssh/config
@@ -15,7 +15,7 @@
 #    4. Commit the updated .age file
 # =============================================================================
 {{- if eq .chezmoi.os "darwin" }}
-Include /Users/aox/.colima/ssh_config
+Include {{ .chezmoi.homeDir }}/.colima/ssh_config
 {{- end }}
 
 Host *
@@ -79,7 +79,7 @@ Host ssh-aox.alwaysdata.net
 
 {{- if eq .chezmoi.os "darwin" }}
 Host lima-default
-  IdentityFile "/Users/aox/.lima/_config/user"
+  IdentityFile "{{ .chezmoi.homeDir }}/.lima/_config/user"
   StrictHostKeyChecking no
   UserKnownHostsFile /dev/null
   NoHostAuthenticationForLocalhost yes
@@ -91,7 +91,7 @@ Host lima-default
   Ciphers "^aes128-gcm@openssh.com,aes256-gcm@openssh.com"
   User aox
   ControlMaster auto
-  ControlPath "/Users/aox/.lima/default/ssh.sock"
+  ControlPath "{{ .chezmoi.homeDir }}/.lima/default/ssh.sock"
   ControlPersist yes
   HostName 127.0.0.1
   Port 60022

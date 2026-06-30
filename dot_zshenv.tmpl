@@ -49,12 +49,9 @@ export PATH="$PATH":"$HOME/.pub-cache/bin"
 {{- end }}
 
 # NVM/FNM (lazy loaded in .zshrc, but NVM_DIR/FNM_DIR must be set here)
-{{- if eq .chezmoi.os "darwin" }}
 export FNM_DIR="$HOME/.fnm"
 export PATH=$PATH:$FNM_DIR
-{{- else }}
-export FNM_DIR="$HOME/.fnm"
-export PATH=$PATH:$FNM_DIR
+{{- if ne .chezmoi.os "darwin" }}
 # Add Node binaries to PATH (fnm - all installed versions)
 if [ -d "$FNM_DIR/node-versions" ]; then
   for dir in "$FNM_DIR/node-versions"/*/installation/bin; do
@@ -83,15 +80,7 @@ export HOMEBREW_NO_GITHUB_API=1
 {{- end }}
 
 # Go
-{{- if eq .chezmoi.os "darwin" }}
-export GOPATH=$HOME/Dev
-export GOROOT="$(brew --prefix golang)/libexec"
-export GOPROXY=https://proxy.golang.org,direct
-export GOSUMDB="sum.golang.org"
-export PATH=$PATH:$GOPATH/bin:$GOROOT/bin
-{{- else }}
 export GOPATH=$HOME/Dev
 export GOPROXY=https://proxy.golang.org,direct
 export GOSUMDB="sum.golang.org"
 export PATH=$PATH:$GOPATH/bin
-{{- end }}
