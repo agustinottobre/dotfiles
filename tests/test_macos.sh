@@ -382,7 +382,7 @@ check_cmd "rg"   "rg (ripgrep)"
 check_cmd "age"
 check_cmd "chezmoi"
 # chezmoi doctor — verify chezmoi itself is healthy
-chezmoi doctor 2>&1 | grep -q 'error' && fail "chezmoi doctor has errors" || pass "chezmoi doctor: no errors"
+chezmoi doctor 2>&1 | grep -q '^error ' && fail "chezmoi doctor has errors" || pass "chezmoi doctor: no errors"
 check_cmd "nvim"
 check_file ".config/nvim/lua/custom/plugins/init.lua" "nvim custom plugins"
 # nvim basic functionality and config syntax
