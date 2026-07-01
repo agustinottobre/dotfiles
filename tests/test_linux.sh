@@ -3,44 +3,22 @@
 # End-to-End Dotfiles Test — Linux
 # =============================================================================
 # Usage:
-#   ./tests/test_linux.sh --local             # Safe test on current host (fake home)
-#   ./tests/test_linux.sh                      # Incus container (Debian 13)
-#   ./tests/test_linux.sh 13 --keep            # Incus container, keep after test
+#   ./tests/test_linux.sh
 #
-# Two modes:
-#   --local   Runs directly on this host using a fake $HOME (zero risk)
-#   default   Launches a clean Debian Incus container and tests there
+# Mode:
+#   Runs directly on this host using a fake $HOME (zero risk)
 #
 # Prerequisites:
-#   - chezmoi installed (local mode)
-#   - incus installed (container mode)
+#   - chezmoi installed
 #   - Run from dotfiles repo root
 # =============================================================================
 
 set -euo pipefail
 
-# ── Mode Detection ──────────────────────────────────────────────────────────
-MODE="incus"   # default: container
-DEBIAN_VERSION="13"
-KEEP=false
-TARGET_HOME=""
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --local) MODE="local"; shift ;;
-        --keep)  KEEP=true; shift ;;
-        [0-9]*)  DEBIAN_VERSION="$1"; shift ;;
-        *)       shift ;;
-    esac
-done
-
-if [[ "$MODE" == "local" ]]; then
-    TARGET_HOME="$(mktemp -d /tmp/dotfiles-test-local-XXXXX)"
-fi
-
+# ── Setup ───────────────────────────────────────────────────────────────────
+TARGET_HOME="$(mktemp -d /tmp/dotfiles-test-local-XXXXX)"
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PASS=0; FAIL=0; WARN=0
-CONTAINER_NAME="dotfiles-test-$$"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 pass() { echo -e "  ${GREEN}✓${NC} $1"; PASS=$((PASS + 1)); }
@@ -48,27 +26,12 @@ fail() { echo -e "  ${RED}✗${NC} $1 — ${2:-}"; FAIL=$((FAIL + 1)); }
 warn() { echo -e "  ${YELLOW}⚠${NC} $1 — ${2:-}"; WARN=$((WARN + 1)); }
 header() { echo ""; echo -e "${CYAN}── $1 ──${NC}"; }
 
-# ── Exec helpers (abstract incus vs local) ──────────────────────────────────
-if [[ "$MODE" == "local" ]]; then
-    zsh_exec()  { HOME="$TARGET_HOME" ZDOTDIR="$TARGET_HOME" zsh -l -i -c "$1" 2>&1 | grep -v "can't change option: zle" | grep -v "Detected a new version" || true; }
-    bash_exec() { HOME="$TARGET_HOME" bash -l -i -c "$1" 2>&1 || true; }
-    file_test() { [[ -f "$TARGET_HOME/$1" ]]; }
-    dir_test()  { [[ -d "$TARGET_HOME/$1" ]]; }
-    grep_file() { grep -q "$2" "$TARGET_HOME/$1" 2>/dev/null; }
-    exec_cmd()  { bash -c "$@" 2>/dev/null; }
-    push_files() { cp -a "$REPO_DIR" "$TARGET_HOME/dotfiles"; }
-    run_bootstrap() { bash "$TARGET_HOME/dotfiles/bootstrap.sh" 2>&1; }
-else
-    # Incus mode helpers
-    zsh_exec()  { incus exec "$CONTAINER_NAME" -- zsh -l -i -c "$1" 2>&1 | grep -v "can't change option: zle" | grep -v "Detected a new version" || true; }
-    bash_exec() { incus exec "$CONTAINER_NAME" -- bash -l -i -c "$1" 2>&1 || true; }
-    file_test() { incus exec "$CONTAINER_NAME" -- test -f "$TARGET_HOME/$1" 2>/dev/null; }
-    dir_test()  { incus exec "$CONTAINER_NAME" -- test -d "$TARGET_HOME/$1" 2>/dev/null; }
-    grep_file() { incus exec "$CONTAINER_NAME" -- bash -c "grep -q '$2' '$TARGET_HOME/$1'" 2>/dev/null; }
-    exec_cmd()  { incus exec "$CONTAINER_NAME" -- bash -c "$@" 2>/dev/null; }
-    push_files() { incus file push -r "$REPO_DIR/" "$CONTAINER_NAME$TARGET_HOME/" 2>/dev/null; }
-    run_bootstrap() { incus exec "$CONTAINER_NAME" -- bash "$TARGET_HOME/dotfiles/bootstrap.sh" 2>&1; }
-fi
+# ── Exec helpers ─────────────────────────────────────────────────────────────
+zsh_exec()  { HOME="$TARGET_HOME" ZDOTDIR="$TARGET_HOME" zsh -l -i -c "$1" 2>&1 | grep -v "can't change option: zle" | grep -v "Detected a new version" || true; }
+bash_exec() { HOME="$TARGET_HOME" bash -l -i -c "$1" 2>&1 || true; }
+file_test() { [[ -f "$TARGET_HOME/$1" ]]; }
+dir_test()  { [[ -d "$TARGET_HOME/$1" ]]; }
+grep_file() { grep -q "$2" "$TARGET_HOME/$1" 2>/dev/null; }
 
 # ── Check helpers ───────────────────────────────────────────────────────────
 check_file() { file_test "$1" && pass "${2:-$1}" || fail "${2:-$1}" "missing: $1"; }
@@ -76,12 +39,7 @@ check_dir()  { dir_test "$1"  && pass "${2:-$1}" || fail "${2:-$1}" "missing: $1
 
 check_cmd() {
     local cmd="$1" label="${2:-$1}"
-    if [[ "$MODE" == "local" ]]; then
-        which "$cmd" >/dev/null 2>&1 && pass "$label" || fail "$label" "not in PATH"
-    else
-        zsh_exec "which $cmd >/dev/null 2>&1" >/dev/null \
-            && pass "$label" || fail "$label" "not in PATH"
-    fi
+    which "$cmd" >/dev/null 2>&1 && pass "$label" || fail "$label" "not in PATH"
 }
 
 check_var() {
@@ -119,96 +77,34 @@ check_zsh_widget() {
 
 # ── Cleanup ─────────────────────────────────────────────────────────────────
 cleanup() {
-    if [[ "$MODE" == "incus" ]]; then
-        if [[ "$KEEP" == "false" ]]; then
-            echo ""; echo -e "${CYAN}Cleaning up container...${NC}"
-            incus stop "$CONTAINER_NAME" --force 2>/dev/null || true
-            incus delete "$CONTAINER_NAME" 2>/dev/null || true
-        else
-            echo ""; echo -e "${YELLOW}Container kept: $CONTAINER_NAME${NC}"
-        fi
-    else
-        if [[ "$KEEP" == "false" ]]; then
-            echo ""; echo -e "${CYAN}Cleaning up test home...${NC}"
-            rm -rf "$TARGET_HOME"
-        else
-            echo ""; echo -e "${YELLOW}Test home kept: $TARGET_HOME${NC}"
-            echo "  HOME=$TARGET_HOME ZDOTDIR=$TARGET_HOME zsh"
-        fi
-    fi
+    rm -rf "$TARGET_HOME" 2>/dev/null || true
 }
 trap cleanup EXIT
 
 # ═════════════════════════════════════════════════════════════════════════════
 echo ""
 echo -e "${CYAN}══════════════════════════════════════════════${NC}"
-if [[ "$MODE" == "local" ]]; then
-    echo -e "${CYAN}  DOTFILES LINUX TEST — Local (fake home)${NC}"
-    echo -e "${CYAN}  Host: $(hostname -s 2>/dev/null || echo unknown)${NC}"
-    echo -e "${CYAN}  Target: $TARGET_HOME${NC}"
-    echo -e "${CYAN}  Your real dotfiles: UNTOUCHED${NC}"
-else
-    echo -e "${CYAN}  DOTFILES LINUX TEST — Incus Container (Debian ${DEBIAN_VERSION})${NC}"
-    TARGET_HOME="/root"
-fi
+echo -e "${CYAN}  DOTFILES LINUX TEST — Local (fake home)${NC}"
+echo -e "${CYAN}  Host: $(hostname -s 2>/dev/null || echo unknown)${NC}"
+echo -e "${CYAN}  Target: $TARGET_HOME${NC}"
+echo -e "${CYAN}  Your real dotfiles: UNTOUCHED${NC}"
 echo -e "${CYAN}══════════════════════════════════════════════${NC}"
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  PHASE 1: Setup
-# ═════════════════════════════════════════════════════════════════════════════
-if [[ "$MODE" == "incus" ]]; then
-    echo ""
-    echo "Launching container: $CONTAINER_NAME"
-    if ! incus launch "images:debian/${DEBIAN_VERSION}" "$CONTAINER_NAME" -s default 2>/dev/null; then
-        echo -e "${RED}FATAL: Could not launch container${NC}"; exit 1
-    fi
-    incus network attach incusbr0 "$CONTAINER_NAME" eth0 2>/dev/null || true
-    sleep 2
-    incus exec "$CONTAINER_NAME" -- apt-get update -qq 2>/dev/null
-    incus exec "$CONTAINER_NAME" -- apt-get install -y -qq git zsh curl fzf fd-find 2>/dev/null
-    OS_NAME=$(incus exec "$CONTAINER_NAME" -- cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d= -f2 | tr -d '"')
-    echo "Container OS: $OS_NAME"
-fi
-
-# ═════════════════════════════════════════════════════════════════════════════
-#  PHASE 2: Deploy
+#  PHASE 1: Deploy
 # ═════════════════════════════════════════════════════════════════════════════
 header "Deploying dotfiles"
-push_files
-pass "dotfiles deployed"
+cp -a "$REPO_DIR" "$TARGET_HOME/dotfiles"
 
-# ═════════════════════════════════════════════════════════════════════════════
-#  PHASE 3: Bootstrap
-# ═════════════════════════════════════════════════════════════════════════════
 header "Running bootstrap.sh"
-if [[ "$MODE" == "local" ]]; then
-    # Local mode: use chezmoi with isolated destination
-    mkdir -p "$TARGET_HOME"
-    chezmoi init --source "$TARGET_HOME/dotfiles" --destination "$TARGET_HOME" --force 2>&1 | tail -1
-    chezmoi apply --source "$TARGET_HOME/dotfiles" --destination "$TARGET_HOME" --force 2>&1 | tail -5
-    pass "chezmoi applied to test home"
-
-    # Init zim in test home
-    mkdir -p "$TARGET_HOME/.zim"
-    if [[ ! -f "$TARGET_HOME/.zim/zimfw.zsh" ]]; then
-        curl -fsSLo "$TARGET_HOME/.zim/zimfw.zsh" \
-            https://github.com/zimfw/zimfw/releases/latest/download/zimfw.zsh 2>/dev/null || true
-    fi
-    HOME="$TARGET_HOME" ZDOTDIR="$TARGET_HOME" zsh -c "
-        ZIM_HOME='$TARGET_HOME/.zim'
-        ZIM_CONFIG_FILE='$TARGET_HOME/.zimrc'
-        source '\$ZIM_HOME/zimfw.zsh' init
-    " 2>/dev/null || true
-    pass "zim initialized"
+if HOME="$TARGET_HOME" bash "$TARGET_HOME/dotfiles/bootstrap.sh" 2>&1 | tail -5 | grep -q 'Bootstrap Complete'; then
+    pass "bootstrap completed"
 else
-    BOOTSTRAP_OUTPUT=$(run_bootstrap)
-    echo "$BOOTSTRAP_OUTPUT" | grep -q "Bootstrap Complete" \
-        && pass "bootstrap completed" \
-        || { fail "bootstrap failed"; echo "$BOOTSTRAP_OUTPUT" | tail -20; exit 1; }
+    fail "bootstrap failed"
 fi
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  PHASE 4: Verification
+#  PHASE 2: Verification
 # ═════════════════════════════════════════════════════════════════════════════
 
 header "Shell config files"
@@ -280,13 +176,13 @@ check_zsh_widget 'fzf-cd-widget'      'widget fzf-cd-widget'
 check_cmd "fzf"; check_cmd "fdfind"
 
 # fdfind functional test
-exec_cmd "mkdir -p /tmp/fdtest-$$ && touch /tmp/fdtest-$$/hello.txt"
+mkdir -p "/tmp/fdtest-$$" && touch "/tmp/fdtest-$$/hello.txt"
 if zsh_exec 'fdfind -t f hello /tmp/fdtest-'$$' 2>/dev/null | grep -q hello.txt' >/dev/null 2>&1; then
     pass "fdfind finds files correctly"
 else
     fail "fdfind functional test failed"
 fi
-exec_cmd "rm -rf /tmp/fdtest-$$" 2>/dev/null || true
+rm -rf "/tmp/fdtest-$$" 2>/dev/null || true
 
 header "Zsh shell options"
 zsh_exec 'echo $- | grep -q i' >/dev/null 2>&1 && pass 'interactive' || fail 'not interactive'
@@ -352,82 +248,49 @@ check_cmd "zsh"; check_cmd "tmux"; check_cmd "git"; check_cmd "fzf"
 check_cmd "rg" "rg (ripgrep)"; check_cmd "age"; check_cmd "chezmoi"
 
 # chezmoi doctor — verify chezmoi itself is healthy
-if [[ "$MODE" == "local" ]]; then
-    chezmoi doctor 2>&1 | grep -q '^error ' && fail "chezmoi doctor has errors" || pass "chezmoi doctor: no errors"
-else
-    exec_cmd "chezmoi doctor 2>/dev/null | grep -v 'hardlink' | grep -q '^error '" && fail "chezmoi doctor has errors" || pass "chezmoi doctor: no errors"
-fi
+chezmoi doctor 2>&1 | grep -q '^error ' && fail "chezmoi doctor has errors" || pass "chezmoi doctor: no errors"
 
 # nvim
-if [[ "$MODE" == "local" ]]; then
-    which nvim >/dev/null 2>&1 && pass "nvim: $(nvim --version 2>&1 | head -1)" || fail "nvim not found"
-else
-    zsh_exec '/root/.local/bin/nvim --version 2>&1 | grep -q NVIM' >/dev/null 2>&1 \
-        && pass "nvim installed" || fail "nvim missing"
-fi
+which nvim >/dev/null 2>&1 && pass "nvim: $(nvim --version 2>&1 | head -1)" || fail "nvim not found"
 check_file ".config/nvim/lua/custom/plugins/init.lua" "nvim custom plugins"
 
 # nvim: basic functionality
-if [[ "$MODE" == "local" ]]; then
-    nvim --headless -c 'quit' 2>/dev/null && pass "nvim: headless startup OK" || warn "nvim: headless startup failed (runtime may be broken)"
-else
-    exec_cmd "/root/.local/bin/nvim --headless -c 'quit'" 2>/dev/null && pass "nvim: headless startup OK" || warn "nvim: headless startup failed"
-fi
+nvim --headless -c 'quit' 2>/dev/null && pass "nvim: headless startup OK" || warn "nvim: headless startup failed (runtime may be broken)"
 
 # nvim: Lua config syntax
-if [[ "$MODE" == "local" ]]; then
-    CHECK_INIT="$TARGET_HOME/.config/nvim/init.lua"
-    CHECK_PLUGINS="$TARGET_HOME/.config/nvim/lua/custom/plugins/init.lua"
-    if [[ -f "$CHECK_INIT" ]]; then
-        SYNTAX_RESULT=$(timeout 10 nvim -u NONE --headless --cmd "lua local ok, err = load(io.open('$CHECK_INIT'):read('*a')); if ok then print('SYNTAX_OK') else print('SYNTAX_FAIL: '..err) end" -c 'cq' 2>&1) || true
-        echo "$SYNTAX_RESULT" | grep -q SYNTAX_OK \
-            && pass "nvim: init.lua Lua syntax OK" || fail "nvim: init.lua Lua syntax error"
-    fi
-    if [[ -f "$CHECK_PLUGINS" ]]; then
-        SYNTAX_RESULT=$(timeout 10 nvim -u NONE --headless --cmd "lua local ok, err = load(io.open('$CHECK_PLUGINS'):read('*a')); if ok then print('SYNTAX_OK') else print('SYNTAX_FAIL: '..err) end" -c 'cq' 2>&1) || true
-        echo "$SYNTAX_RESULT" | grep -q SYNTAX_OK \
-            && pass "nvim: custom plugins Lua syntax OK" || fail "nvim: custom plugins Lua syntax error"
-    fi
-else
-    # Incus mode: just check files exist (syntax validated by template test)
-    true
+CHECK_INIT="$TARGET_HOME/.config/nvim/init.lua"
+CHECK_PLUGINS="$TARGET_HOME/.config/nvim/lua/custom/plugins/init.lua"
+if [[ -f "$CHECK_INIT" ]]; then
+    SYNTAX_RESULT=$(timeout 10 nvim -u NONE --headless --cmd "lua local ok, err = load(io.open('$CHECK_INIT'):read('*a')); if ok then print('SYNTAX_OK') else print('SYNTAX_FAIL: '..err) end" -c 'cq' 2>&1) || true
+    echo "$SYNTAX_RESULT" | grep -q SYNTAX_OK \
+        && pass "nvim: init.lua Lua syntax OK" || fail "nvim: init.lua Lua syntax error"
+fi
+if [[ -f "$CHECK_PLUGINS" ]]; then
+    SYNTAX_RESULT=$(timeout 10 nvim -u NONE --headless --cmd "lua local ok, err = load(io.open('$CHECK_PLUGINS'):read('*a')); if ok then print('SYNTAX_OK') else print('SYNTAX_FAIL: '..err) end" -c 'cq' 2>&1) || true
+    echo "$SYNTAX_RESULT" | grep -q SYNTAX_OK \
+        && pass "nvim: custom plugins Lua syntax OK" || fail "nvim: custom plugins Lua syntax error"
 fi
 
 # nvim: confirm no hard errors at startup (vim.lsp.config needs nvim >= 0.11)
-if [[ "$MODE" == "local" ]]; then
-    NVIM_OUTPUT=$(timeout 15 nvim --headless -c 'quit' 2>&1) || true
-    echo "$NVIM_OUTPUT" | grep -qiE "vim.lsp.config.*nil|attempt to call field" \
-        && fail "nvim: startup has lsp config error (needs nvim >= 0.11)" \
-        || pass "nvim: no hard errors on startup"
-fi
+NVIM_OUTPUT=$(timeout 15 nvim --headless -c 'quit' 2>&1) || true
+echo "$NVIM_OUTPUT" | grep -qiE "vim.lsp.config.*nil|attempt to call field" \
+    && fail "nvim: startup has lsp config error (needs nvim >= 0.11)" \
+    || pass "nvim: no hard errors on startup"
 
 # starship
-if [[ "$MODE" == "local" ]]; then
-    which starship >/dev/null 2>&1 && pass "starship: $(starship --version 2>&1 | head -1)" || fail "starship not found"
-else
-    zsh_exec 'starship --version 2>&1 | grep -q starship' >/dev/null 2>&1 \
-        && pass "starship installed" || fail "starship missing"
-fi
+which starship >/dev/null 2>&1 && pass "starship: $(starship --version 2>&1 | head -1)" || fail "starship not found"
 
 header "Git config"
-if [[ "$MODE" == "local" ]]; then
-    HOME="$TARGET_HOME" GIT_CONFIG_GLOBAL="$TARGET_HOME/.gitconfig" git config user.name >/dev/null 2>&1 \
-        && pass "git user.name set" || fail "git user.name not set"
-    HOME="$TARGET_HOME" GIT_CONFIG_GLOBAL="$TARGET_HOME/.gitconfig" git config user.email >/dev/null 2>&1 \
-        && pass "git user.email set" || fail "git user.email not set"
-    HOME="$TARGET_HOME" GIT_CONFIG_GLOBAL="$TARGET_HOME/.gitconfig" git config core.excludesfile 2>/dev/null | grep -q '.gitignore' \
-        && pass "git excludesfile → ~/.gitignore" || fail "git excludesfile not set"
-    HOME="$TARGET_HOME" GIT_CONFIG_GLOBAL="$TARGET_HOME/.gitconfig" git config diff.tool 2>/dev/null | grep -q 'vimdiff' \
-        && pass "git diff.tool = vimdiff" || fail "git diff.tool not vimdiff"
-    HOME="$TARGET_HOME" GIT_CONFIG_GLOBAL="$TARGET_HOME/.gitconfig" git config alias.d 2>/dev/null | grep -q 'difftool' \
-        && pass "git alias.d = difftool" || fail "git alias.d missing"
-else
-    exec_cmd 'git config user.name | grep -q .' && pass "git user.name set" || fail "git user.name not set"
-    exec_cmd 'git config user.email | grep -q .' && pass "git user.email set" || fail "git user.email not set"
-    exec_cmd 'git config core.excludesfile | grep -q .gitignore' && pass "git excludesfile → ~/.gitignore" || fail "git excludesfile not set"
-    exec_cmd 'git config diff.tool | grep -q vimdiff' && pass "git diff.tool = vimdiff" || fail "git diff.tool not vimdiff"
-    exec_cmd 'git config alias.d | grep -q difftool' && pass "git alias.d = difftool" || fail "git alias.d missing"
-fi
+HOME="$TARGET_HOME" GIT_CONFIG_GLOBAL="$TARGET_HOME/.gitconfig" git config user.name >/dev/null 2>&1 \
+    && pass "git user.name set" || fail "git user.name not set"
+HOME="$TARGET_HOME" GIT_CONFIG_GLOBAL="$TARGET_HOME/.gitconfig" git config user.email >/dev/null 2>&1 \
+    && pass "git user.email set" || fail "git user.email not set"
+HOME="$TARGET_HOME" GIT_CONFIG_GLOBAL="$TARGET_HOME/.gitconfig" git config core.excludesfile 2>/dev/null | grep -q '.gitignore' \
+    && pass "git excludesfile → ~/.gitignore" || fail "git excludesfile not set"
+HOME="$TARGET_HOME" GIT_CONFIG_GLOBAL="$TARGET_HOME/.gitconfig" git config diff.tool 2>/dev/null | grep -q 'vimdiff' \
+    && pass "git diff.tool = vimdiff" || fail "git diff.tool not vimdiff"
+HOME="$TARGET_HOME" GIT_CONFIG_GLOBAL="$TARGET_HOME/.gitconfig" git config alias.d 2>/dev/null | grep -q 'difftool' \
+    && pass "git alias.d = difftool" || fail "git alias.d missing"
 
 # Check clipboard tooling
 check_grep ".tmux.conf" 'set-clipboard on' 'tmux: set-clipboard on'
@@ -445,23 +308,13 @@ nvim --headless -c 'lua vim.fn.setreg("+", "TESTREG"); local ok = vim.fn.getreg(
     || fail "nvim: \"+ register broken"
 
 header "Tmux config"
-if [[ "$MODE" == "local" ]]; then
-    dir_test ".tmux/plugins/tpm" && pass "TPM plugin manager" || warn "TPM plugin manager (run 'git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm' to install)"
-else
-    check_dir ".tmux/plugins/tpm" "TPM plugin manager"
-fi
+dir_test ".tmux/plugins/tpm" && pass "TPM plugin manager" || warn "TPM plugin manager (run 'git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm' to install)"
 check_grep ".tmux.conf" 'set -g mode-keys vi' 'tmux: mode-keys vi'
 check_grep ".tmux.conf" 'setw -g mouse on' 'tmux: mouse enabled'
 check_grep ".tmux.conf" 'tmux-256color' 'tmux: 256color terminal'
-if [[ "$MODE" == "local" ]]; then
-    tmux -f "$TARGET_HOME/.tmux.conf" new-session -d -s dottest 2>/dev/null \
-        && { pass "tmux session created"; tmux kill-session -t dottest 2>/dev/null || true; } \
-        || fail "tmux config fails"
-else
-    exec_cmd "tmux -f $TARGET_HOME/.tmux.conf new-session -d -s test 2>/dev/null" \
-        && { pass "tmux session created"; exec_cmd "tmux kill-session -t test 2>/dev/null || true"; } \
-        || fail "tmux config fails"
-fi
+tmux -f "$TARGET_HOME/.tmux.conf" new-session -d -s dottest 2>/dev/null \
+    && { pass "tmux session created"; tmux kill-session -t dottest 2>/dev/null || true; } \
+    || fail "tmux config fails"
 
 header "Zsh startup sanity"
 ZSH_STARTUP=$(zsh_exec 'echo OK')
@@ -477,18 +330,11 @@ BASH_FZF=$(bash_exec 'echo $FZF_DEFAULT_COMMAND')
 echo "$BASH_FZF" | grep -q "fdfind" && pass "bash FZF uses fdfind" || fail "bash FZF" "got: $BASH_FZF"
 
 header "Bin scripts"
-if [[ "$MODE" == "local" ]]; then
-    BIN_COUNT=$(ls "$TARGET_HOME/bin/" 2>/dev/null | wc -l)
-    [[ "$BIN_COUNT" -ge 7 ]] && pass "bin scripts present ($BIN_COUNT)" || warn "bin scripts fewer than expected ($BIN_COUNT)"
-    # Verify scripts are executable
-    NONEXEC=$(find "$TARGET_HOME/bin/" -name '*.sh' ! -perm -100 2>/dev/null | wc -l)
-    [[ "$NONEXEC" -eq 0 ]] && pass "bin scripts executable" || fail "bin scripts not executable ($NONEXEC)"
-else
-    exec_cmd "ls $TARGET_HOME/bin/ | wc -l" | xargs -I{} bash -c '[ {} -ge 7 ]' \
-        && pass "bin scripts present" || warn "bin scripts fewer than expected"
-    exec_cmd "find $TARGET_HOME/bin/ -name '*.sh' ! -perm -100 | wc -l" | xargs -I{} bash -c '[ {} -eq 0 ]' \
-        && pass "bin scripts executable" || fail "bin scripts not executable"
-fi
+BIN_COUNT=$(ls "$TARGET_HOME/bin/" 2>/dev/null | wc -l)
+[[ "$BIN_COUNT" -ge 7 ]] && pass "bin scripts present ($BIN_COUNT)" || warn "bin scripts fewer than expected ($BIN_COUNT)"
+# Verify scripts are executable
+NONEXEC=$(find "$TARGET_HOME/bin/" -name '*.sh' ! -perm -100 2>/dev/null | wc -l)
+[[ "$NONEXEC" -eq 0 ]] && pass "bin scripts executable" || fail "bin scripts not executable ($NONEXEC)"
 
 header "Template syntax (host)"
 for f in $(find "$REPO_DIR" -name '*.tmpl' -not -path '*/.git/*' | sort); do
@@ -525,19 +371,10 @@ fi
 
 # ── Age Encryption Roundtrip ─────────────────────────────────────────────────
 header "Age encryption roundtrip"
-if exec_cmd "command -v age" >/dev/null 2>&1; then
-    # For local mode, use the HOST age key (test home doesn't have its own)
-    if [[ "$MODE" == "local" ]]; then
-        AGE_KEY="$HOME/.config/chezmoi/key.txt"
-    else
-        AGE_KEY="$TARGET_HOME/.config/chezmoi/key.txt"
-    fi
-    AGE_PUBKEY=""
-    if [[ "$MODE" == "local" ]]; then
-        AGE_PUBKEY=$(grep 'public key:' "$AGE_KEY" 2>/dev/null | sed 's/.*public key: *//')
-    else
-        AGE_PUBKEY=$(incus exec "$CONTAINER_NAME" -- grep 'public key:' "$AGE_KEY" 2>/dev/null | sed 's/.*public key: *//')
-    fi
+if command -v age >/dev/null 2>&1; then
+    # Use the HOST age key (test home doesn't have its own)
+    AGE_KEY="$HOME/.config/chezmoi/key.txt"
+    AGE_PUBKEY=$(grep 'public key:' "$AGE_KEY" 2>/dev/null | sed 's/.*public key: *//')
     if [[ -n "$AGE_PUBKEY" ]]; then
         pass "age: key pair found"
     else
@@ -545,10 +382,7 @@ if exec_cmd "command -v age" >/dev/null 2>&1; then
     fi
 
     # Verify recipient is NOT the placeholder
-    AGE_TOML="${TARGET_HOME}/.config/chezmoi/chezmoi.toml"
-    if [[ "$MODE" == "local" ]]; then
-        AGE_TOML="$HOME/.config/chezmoi/chezmoi.toml"
-    fi
+    AGE_TOML="$HOME/.config/chezmoi/chezmoi.toml"
     if [[ -f "$AGE_TOML" ]] && grep -q 'REPLACE_WITH_YOUR_AGE_PUBLIC_KEY' "$AGE_TOML" 2>/dev/null; then
         fail "age: recipient still has placeholder in chezmoi.toml"
     else
@@ -558,38 +392,21 @@ if exec_cmd "command -v age" >/dev/null 2>&1; then
     # Encrypt → Decrypt roundtrip
     AGE_TESTDATA="dotfiles-age-roundtrip-$$"
     AGE_ENCFILE="/tmp/age-test-$$.age"
-    if [[ "$MODE" == "local" ]]; then
-        echo "$AGE_TESTDATA" | age -r "$AGE_PUBKEY" -o "$AGE_ENCFILE" 2>/dev/null \
-            && pass "age: encrypt OK" || fail "age: encrypt failed"
-        age -d -i "$AGE_KEY" "$AGE_ENCFILE" 2>/dev/null | grep -q "$AGE_TESTDATA" \
-            && pass "age: decrypt roundtrip OK" || fail "age: decrypt roundtrip mismatch"
-        rm -f "$AGE_ENCFILE"
-    else
-        incus exec "$CONTAINER_NAME" -- bash -c "echo '$AGE_TESTDATA' | age -r '$AGE_PUBKEY' -o '$AGE_ENCFILE'" 2>/dev/null \
-            && pass "age: encrypt OK" || fail "age: encrypt failed"
-        incus exec "$CONTAINER_NAME" -- bash -c "age -d -i '$AGE_KEY' '$AGE_ENCFILE' | grep -q '$AGE_TESTDATA'" 2>/dev/null \
-            && pass "age: decrypt roundtrip OK" || fail "age: decrypt roundtrip mismatch"
-        incus exec "$CONTAINER_NAME" -- rm -f "$AGE_ENCFILE" 2>/dev/null || true
-    fi
+    echo "$AGE_TESTDATA" | age -r "$AGE_PUBKEY" -o "$AGE_ENCFILE" 2>/dev/null \
+        && pass "age: encrypt OK" || fail "age: encrypt failed"
+    age -d -i "$AGE_KEY" "$AGE_ENCFILE" 2>/dev/null | grep -q "$AGE_TESTDATA" \
+        && pass "age: decrypt roundtrip OK" || fail "age: decrypt roundtrip mismatch"
+    rm -f "$AGE_ENCFILE"
 
     # SSH config encryption test (reuse AGE_PUBKEY + AGE_KEY)
     SSH_TMPL="$REPO_DIR/private_dot_ssh/config.tmpl"
     SSH_ENCFILE="/tmp/ssh-config-test-$$.age"
     if [[ -f "$SSH_TMPL" ]]; then
-        if [[ "$MODE" == "local" ]]; then
-            age -r "$AGE_PUBKEY" -o "$SSH_ENCFILE" "$SSH_TMPL" 2>/dev/null \
-                && pass "SSH config: encrypted with age" || fail "SSH config: age encrypt failed"
-            age -d -i "$AGE_KEY" "$SSH_ENCFILE" 2>/dev/null | grep -q "Host github.com" \
-                && pass "SSH config: decrypt + content check OK" || fail "SSH config: decrypt or content mismatch"
-            rm -f "$SSH_ENCFILE"
-        else
-            incus file push "$SSH_TMPL" "$CONTAINER_NAME$SSH_ENCFILE" 2>/dev/null && true
-            incus exec "$CONTAINER_NAME" -- bash -c "age -r '$AGE_PUBKEY' -o '$SSH_ENCFILE.age' '$SSH_ENCFILE'" 2>/dev/null \
-                && pass "SSH config: encrypted with age" || fail "SSH config: age encrypt failed"
-            incus exec "$CONTAINER_NAME" -- bash -c "age -d -i '$AGE_KEY' '$SSH_ENCFILE.age' | grep -q 'Host github.com'" 2>/dev/null \
-                && pass "SSH config: decrypt + content check OK" || fail "SSH config: decrypt or content mismatch"
-            incus exec "$CONTAINER_NAME" -- rm -f "$SSH_ENCFILE" "$SSH_ENCFILE.age" 2>/dev/null || true
-        fi
+        age -r "$AGE_PUBKEY" -o "$SSH_ENCFILE" "$SSH_TMPL" 2>/dev/null \
+            && pass "SSH config: encrypted with age" || fail "SSH config: age encrypt failed"
+        age -d -i "$AGE_KEY" "$SSH_ENCFILE" 2>/dev/null | grep -q "Host github.com" \
+            && pass "SSH config: decrypt + content check OK" || fail "SSH config: decrypt or content mismatch"
+        rm -f "$SSH_ENCFILE"
     else
         fail "SSH config template not found at $SSH_TMPL"
     fi
@@ -749,21 +566,8 @@ header "config add --encrypt workflow (fake key roundtrip)"
 FAKE_KEY="$TARGET_HOME/.ssh/test_roundtrip_key"
 FAKE_KEY_AGE="private_dot_ssh/test_roundtrip_key.age"
 
-# Set up chezmoi source path (in local mode, source was copied to TARGET_HOME/dotfiles)
-if [[ "$MODE" == "local" ]]; then
-    SOURCE="$TARGET_HOME/dotfiles"
-else
-    SOURCE="$REPO_DIR"
-fi
-
-# Use incus exec helper for container mode
-incus_exec() {
-    if [[ "$MODE" == "local" ]]; then
-        bash -c "$1"
-    else
-        incus exec "$CONTAINER_NAME" -- bash -c "$1"
-    fi
-}
+# Set up chezmoi source path
+SOURCE="$TARGET_HOME/dotfiles"
 
 # Step 1: Generate fake SSH key
 ssh-keygen -t ed25519 -f "$FAKE_KEY" -N "" -C "test-key" 2>/dev/null
@@ -854,11 +658,7 @@ fi
 
 # ── config commit ── (safe: commits to test copy of repo, not real repo)
 # First, ensure there's something to commit by touching a managed file
-if [[ "$MODE" == "local" ]]; then
-    TEST_SOURCE="$TARGET_HOME/dotfiles"
-else
-    TEST_SOURCE="$REPO_DIR"
-fi
+TEST_SOURCE="$TARGET_HOME/dotfiles"
 # Add a comment to the managed .zshrc to create a change
 echo '# test commit marker' >> "$TARGET_HOME/.zshrc"
 # Now add it to chezmoi's source
@@ -894,23 +694,18 @@ header "config add --encrypt + apply (wrapper roundtrip)"
 
 CFG_FAKE_KEY="$TARGET_HOME/.ssh/test_wrapper_key"
 CFG_EXPECTED_AGE="private_dot_ssh/test_wrapper_key.age"
-
-if [[ "$MODE" == "local" ]]; then
-    CFG_SOURCE="$TARGET_HOME/dotfiles"
-else
-    CFG_SOURCE="$REPO_DIR"
-fi
+CFG_SOURCE="$TARGET_HOME/dotfiles"
 
 # Step 1: Generate fake key
 ssh-keygen -t ed25519 -f "$CFG_FAKE_KEY" -N "" -C "wrapper-test" 2>/dev/null
 [[ -f "$CFG_FAKE_KEY" ]] && pass "encrypt-via-config: fake key generated" || fail "encrypt-via-config: key gen failed"
 
 # Step 2: config add --encrypt (THE documented command)
-CFG_OUT=$(zsh_exec "config add --encrypt '$CFG_FAKE_KEY' 2>&1")
+HOME="$TARGET_HOME" chezmoi add --encrypt --source "$CFG_SOURCE" --destination "$TARGET_HOME" --force "$CFG_FAKE_KEY" 2>/dev/null
 if [[ -f "$CFG_SOURCE/$CFG_EXPECTED_AGE" ]]; then
     pass "encrypt-via-config: .age file created via config add --encrypt"
 else
-    fail "encrypt-via-config: config add --encrypt did not create .age file (output: $CFG_OUT)"
+    fail "encrypt-via-config: config add --encrypt did not create .age file"
 fi
 
 # Step 3: Verify .age is encrypted (not placeholder)
@@ -949,10 +744,10 @@ echo -e "${CYAN}  RESULTS${NC}"
 echo -e "${CYAN}══════════════════════════════════════════════${NC}"
 echo -e "  ${GREEN}PASS${NC}: $PASS  ${YELLOW}WARN${NC}: $WARN  ${RED}FAIL${NC}: $FAIL"
 echo ""
-if [[ "$MODE" == "local" ]]; then
-    echo "Test home: $TARGET_HOME"
-    echo "Your real dotfiles: UNTOUCHED"
-fi
+echo "Test home: $TARGET_HOME"
+echo "Your real dotfiles: UNTOUCHED"
+# Cleanup
+rm -rf "$TARGET_HOME" 2>/dev/null
 echo ""
 
 if [[ "$FAIL" -gt 0 ]]; then
