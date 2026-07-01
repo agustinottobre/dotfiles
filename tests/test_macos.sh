@@ -171,13 +171,13 @@ echo "persistentState = \"$CHEZMOI_PERSISTENT_STATE\"" >> "$CHEZMOI_STATE/chezmo
 mkdir -p "$TEST_HOME/.config/chezmoi"
 cp "$CHEZMOI_STATE/chezmoi.toml" "$TEST_HOME/.config/chezmoi/chezmoi.toml"
 
-echo "Applying dotfiles..."
-chezmoi --config "$CHEZMOI_STATE/chezmoi.toml" apply --source "$REPO_DIR" --destination "$TEST_HOME" --force 2>&1 | grep -v "^$" | tail -5
-# Apply may have non-zero exit for non-critical issues, check files exist instead
-
 # Remove any stale test .age files from previous crashed test runs
 rm -f "$REPO_DIR/private_dot_ssh/test_roundtrip_key.age" 2>/dev/null
 rm -f "$REPO_DIR/private_dot_ssh/test_wrapper_key.age" 2>/dev/null
+git -C "$REPO_DIR" checkout -- private_dot_ssh/ 2>/dev/null || true
+
+echo "Applying dotfiles..."
+chezmoi --config "$CHEZMOI_STATE/chezmoi.toml" apply --source "$REPO_DIR" --destination "$TEST_HOME" --force 2>&1 | grep -v "^$" | tail -5 || true
 
 # Fix test config: replace placeholder recipient with host age key
 # (run_onchange modifies HOST config, not test config)
