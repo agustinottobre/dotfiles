@@ -175,6 +175,19 @@ echo "Applying dotfiles..."
 chezmoi --config "$CHEZMOI_STATE/chezmoi.toml" apply --source "$REPO_DIR" --destination "$TEST_HOME" --force 2>&1 | grep -v "^$" | tail -3
 # Apply may have non-zero exit for non-critical issues, check files exist instead
 
+# Fix test config: replace placeholder recipient with host age key
+# (run_onchange modifies HOST config, not test config)
+if [ -f "$HOME/.config/chezmoi/key.txt" ]; then
+    AGE_PUBKEY=$(grep 'public key:' "$HOME/.config/chezmoi/key.txt" 2>/dev/null | sed 's/.*public key: *//')
+    if [ -n "$AGE_PUBKEY" ]; then
+        mkdir -p "$TEST_HOME/.config/chezmoi"
+        cp "$HOME/.config/chezmoi/key.txt" "$TEST_HOME/.config/chezmoi/key.txt"
+        sed -i '' "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$AGE_PUBKEY/" "$TEST_HOME/.config/chezmoi/chezmoi.toml"
+        # Fix identity path to point to test home, not real home
+        sed -i '' "s|identity = \".*\"|identity = \"$TEST_HOME/.config/chezmoi/key.txt\"|" "$TEST_HOME/.config/chezmoi/chezmoi.toml"
+    fi
+fi
+
 # Install TPM in test home (run_once script uses .chezmoi.homeDir which
 # resolves to the real home, so TPM must be cloned manually for testing)
 if [[ ! -d "$TEST_HOME/.tmux/plugins/tpm" ]]; then
