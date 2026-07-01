@@ -18,7 +18,7 @@ config add --encrypt ~/.ssh/my_key        # encrypt & track a file
 config edit ~/.ssh/config                  # edit a managed file
 config diff                                # preview changes
 config apply                               # deploy changes
-config commit -m "msg" && config push      # commit & push
+config commit -m "msg" && config git -- push      # commit & push
 
 # ── Master key backup ──
 # Option A: Password manager
@@ -31,7 +31,7 @@ cp ~/.config/chezmoi/key.txt /secure/location/
 chezmoi doctor                              # diagnose chezmoi setup
 ls ~/.ssh/                                  # check deployed keys
 ssh -vT git@github.com                     # test SSH key works
-age-keygen -o ~/.config/chezmoi/key.txt    # regenerate master key (paste from backup)
+chezmoi age-keygen --output ~/.config/chezmoi/key.txt   # regenerate master key (paste from backup)
 ```
 
 ## What's encrypted
@@ -46,7 +46,7 @@ age-keygen -o ~/.config/chezmoi/key.txt    # regenerate master key (paste from b
 ```bash
 ./bootstrap.sh                    # deploy normally
 # ... work ...
-~/dotfiles/bin/nuke_dotfiles.sh  # wipe everything when done
+~/dotfiles/bin/executable_nuke_dotfiles.sh  # wipe everything when done
 ```
 
 See `DOCS/KEYS.md` for SSH key workflow. See `DOCS/ROTATION.md` for key rotation.

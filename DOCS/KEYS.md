@@ -16,20 +16,20 @@ config add --encrypt ~/.ssh/solarbox_id_rsa
 config add --encrypt ~/.ssh/alwaysdata_id_ed25519
 config add --encrypt ~/.ssh/linksys_wrt3200acm_id
 config add --encrypt ~/.ssh/id_rsa
-config diff && config apply && config commit -m "encrypt: SSH keys" && config push
+config diff && config apply && config commit -m "encrypt: SSH keys" && config git -- push
 
 # ── Daily ──
 config add --encrypt ~/.ssh/new_key       # encrypt a new key
 config edit ~/.ssh/config                  # edit SSH config
 config diff                                # review changes
 config commit -m "update: ssh keys"        # commit
-config push                                # push
+config git -- push                           # push
 
 # ── On other machines ──
 config update && config apply              # keys auto-decrypt to ~/.ssh/
 
 # ── Nuke ──
-~/dotfiles/bin/nuke_dotfiles.sh            # wipe all secrets from this machine
+~/dotfiles/bin/executable_nuke_dotfiles.sh   # wipe all secrets from this machine
 ```
 
 ## Which tool
@@ -42,7 +42,7 @@ Use `config` (chezmoi wrapper), not raw `git`. Run commands from anywhere — ch
 | Edit a dotfile | `config` (fzf) or `config edit ~/.zshrc` |
 | See changes | `config diff` |
 | Commit | `config commit -m "msg"` |
-| Push | `config push` |
+| Push | `config git -- push` |
 
 ## Key inventory
 

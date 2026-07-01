@@ -14,7 +14,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/github_id_rsa -C "you@email.com"
 
 # 4. Re-encrypt
 config add --encrypt ~/.ssh/github_id_rsa
-config commit -m "rotate: github SSH key" && config push
+config commit -m "rotate: github SSH key" && config git -- push
 
 # 5. Deploy everywhere
 config update && config apply
@@ -24,9 +24,10 @@ config update && config apply
 
 ```bash
 # 1. Generate new key
-age-keygen -o ~/new-key.txt
+chezmoi age-keygen --output ~/new-key.txt
 
-# 2. Update .chezmoi.toml.tmpl → change identity path if needed
+# 2. Update .chezmoi.toml.tmpl if you store the key at a non-standard location
+#    (default is ~/.config/chezmoi/key.txt — template uses {{ .chezmoi.homeDir }})
 
 # 3. Re-encrypt all .age files
 cd $(chezmoi source-path)
@@ -42,7 +43,7 @@ done
 rm -rf /tmp/secrets
 
 # 4. Commit + push
-config commit -m "rotate: age master key" && config push
+config commit -m "rotate: age master key" && config git -- push
 
 # 5. Distribute new key to all machines
 scp ~/new-key.txt user@machine:~/.config/chezmoi/key.txt
@@ -62,6 +63,6 @@ git push origin --force --all
 ## Emergency nuke
 
 ```bash
-~/dotfiles/bin/nuke_dotfiles.sh
+~/dotfiles/bin/executable_nuke_dotfiles.sh
 # Removes: ~/.ssh/*, ~/.ssh/config, ~/.config/chezmoi/key.txt
 ```

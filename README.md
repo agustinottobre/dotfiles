@@ -74,8 +74,8 @@ chezmoi edit ~/.secret/file
 
 ```bash
 # Add a new SSH key (encrypted, never hits git in plaintext)
-cp ~/.ssh/my_new_key ~/Dev/dotfiles/private_dot_ssh/
-cd ~/Dev/dotfiles/private_dot_ssh/
+cp ~/.ssh/my_new_key ~/dotfiles/private_dot_ssh/
+cd ~/dotfiles/private_dot_ssh/
 chezmoi add --encrypt my_new_key         # creates my_new_key.age
 
 # Add a new SSH host
@@ -121,8 +121,7 @@ Both scripts use isolated `$HOME` — your real dotfiles are untouched.
 
 ```bash
 # Linux
-./tests/test_linux.sh --local       # fast: fake home on current host
-./tests/test_linux.sh 13            # full: clean Debian 13 Incus container
+./tests/test_linux.sh               # fake home on current host
 
 # macOS
 ./tests/test_macos.sh               # fake home, safe on your main Mac
