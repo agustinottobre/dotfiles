@@ -172,8 +172,12 @@ mkdir -p "$TEST_HOME/.config/chezmoi"
 cp "$CHEZMOI_STATE/chezmoi.toml" "$TEST_HOME/.config/chezmoi/chezmoi.toml"
 
 echo "Applying dotfiles..."
-chezmoi --config "$CHEZMOI_STATE/chezmoi.toml" apply --source "$REPO_DIR" --destination "$TEST_HOME" --force 2>&1 | grep -v "^$" | tail -3
+chezmoi --config "$CHEZMOI_STATE/chezmoi.toml" apply --source "$REPO_DIR" --destination "$TEST_HOME" --force 2>&1 | grep -v "^$" | tail -5
 # Apply may have non-zero exit for non-critical issues, check files exist instead
+
+# Remove any stale test .age files from previous crashed test runs
+rm -f "$REPO_DIR/private_dot_ssh/test_roundtrip_key.age" 2>/dev/null
+rm -f "$REPO_DIR/private_dot_ssh/test_wrapper_key.age" 2>/dev/null
 
 # Fix test config: replace placeholder recipient with host age key
 # (run_onchange modifies HOST config, not test config)
@@ -696,8 +700,8 @@ linux_in_source_excluded_on_macos "dot_zprofile.tmpl" '/usr/local/sbin'         
 # ── config add --encrypt workflow (fake key roundtrip) ────────────────────────
 header "config add --encrypt workflow (fake key roundtrip)"
 
-# Source repo was copied to $TEST_HOME/dotfiles during setup
-SOURCE="$TEST_HOME/dotfiles"
+# Source for macOS test is the real repo (chezmoi uses --source "$REPO_DIR")
+SOURCE="$REPO_DIR"
 FAKE_KEY="$TEST_HOME/.ssh/test_roundtrip_key"
 FAKE_KEY_AGE="private_dot_ssh/test_roundtrip_key.age"
 
@@ -775,12 +779,13 @@ fi
 # Cleanup
 rm -f "$SOURCE/$FAKE_KEY_AGE" 2>/dev/null
 rm -f "$FAKE_KEY" "$FAKE_KEY.pub" 2>/dev/null
+git -C "$REPO_DIR" checkout -- private_dot_ssh/ 2>/dev/null || true
 
 # ── config wrapper subcommands (daily workflow) ───────────────────────────────
 header "config wrapper subcommands (daily workflow)"
 
 # Source for macOS test (copied to TEST_HOME during setup)
-TEST_SOURCE="$TEST_HOME/dotfiles"
+TEST_SOURCE="$REPO_DIR"
 
 # ── config diff ──
 if zsh_test 'config diff 2>&1; echo EXIT:$?' | grep -q 'EXIT:0'; then
@@ -827,7 +832,7 @@ zsh_test 'config nonexistent_cmd 2>/dev/null; echo EXIT:$?' | grep -q 'EXIT:1' \
 header "config add --encrypt + apply (wrapper roundtrip) (macOS)"
 
 CFG_FAKE_KEY="$TEST_HOME/.ssh/test_wrapper_key"
-CFG_SOURCE="$TEST_HOME/dotfiles"
+CFG_SOURCE="$REPO_DIR"
 CFG_EXPECTED_AGE="private_dot_ssh/test_wrapper_key.age"
 
 # Step 1: Generate fake key
