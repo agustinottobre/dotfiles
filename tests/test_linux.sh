@@ -62,16 +62,18 @@ HOME="$TARGET_HOME" bash -c "
 # Verify dotfiles were deployed (check key files exist)
 [[ -f "$TARGET_HOME/.zshrc" ]] && [[ -f "$TARGET_HOME/.zshenv" ]] && pass "dotfiles deployed" || fail "dotfiles deployment failed"
 
-# Generate age key for encryption tests (normally done by run_onchange)
+# Generate age key for encryption tests (normally done by bootstrap.sh)
 if [ ! -f "$TARGET_HOME/.config/chezmoi/key.txt" ]; then
     mkdir -p "$TARGET_HOME/.config/chezmoi"
-    age-keygen -o "$TARGET_HOME/.config/chezmoi/key.txt" 2>/dev/null || true
+    chezmoi age-keygen --output "$TARGET_HOME/.config/chezmoi/key.txt" 2>/dev/null || true
 fi
 # Fix chezmoi config: replace placeholder with real recipient
 if [ -f "$TARGET_HOME/.config/chezmoi/key.txt" ] && [ -f "$TARGET_HOME/.config/chezmoi/chezmoi.toml" ]; then
-    AGE_PUBKEY=$(grep 'public key:' "$TARGET_HOME/.config/chezmoi/key.txt" 2>/dev/null | sed 's/.*public key: *//')
+    AGE_PUBKEY=$(chezmoi age-keygen -y "$TARGET_HOME/.config/chezmoi/key.txt" 2>/dev/null || true)
     if [ -n "$AGE_PUBKEY" ]; then
         sed -i "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$AGE_PUBKEY/" "$TARGET_HOME/.config/chezmoi/chezmoi.toml"
+        # Fix identity path to point to test home
+        sed -i "s|identity = \".*\"|identity = \"$TARGET_HOME/.config/chezmoi/key.txt\"|" "$TARGET_HOME/.config/chezmoi/chezmoi.toml"
     fi
 fi
 
@@ -345,7 +347,7 @@ header "Age encryption roundtrip"
 if command -v age >/dev/null 2>&1; then
     # Use the HOST age key (test home doesn't have its own)
     AGE_KEY="$HOME/.config/chezmoi/key.txt"
-    AGE_PUBKEY=$(grep 'public key:' "$AGE_KEY" 2>/dev/null | sed 's/.*public key: *//')
+    AGE_PUBKEY=$(chezmoi age-keygen -y "$AGE_KEY" 2>/dev/null || true)
     if [[ -n "$AGE_PUBKEY" ]]; then
         pass "age: key pair found"
     else
