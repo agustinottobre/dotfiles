@@ -47,6 +47,20 @@ fail()   { echo -e "  ${RED}✗${NC} $1 — ${2:-}"; FAIL=$((FAIL + 1)); }
 warn()   { echo -e "  ${YELLOW}⚠${NC} $1 — ${2:-}"; WARN=$((WARN + 1)); }
 header() { echo ""; echo -e "${CYAN}── $1 ──${NC}"; }
 
+# macOS doesn't ship GNU timeout. Define a fallback if missing.
+if ! command -v timeout >/dev/null 2>&1; then
+    timeout() {
+        local t="$1"; shift
+        "$@" &
+        local pid=$!
+        ( sleep "$t"; kill $pid 2>/dev/null ) &
+        wait $pid 2>/dev/null
+        local ret=$?
+        kill $! 2>/dev/null
+        return "${ret:-143}"
+    }
+fi
+
 # Run zsh in isolated test home
 zsh_test() {
     HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" zsh -l -i -c "$1" 2>&1 \
@@ -172,8 +186,8 @@ mkdir -p "$TEST_HOME/.config/chezmoi"
 cp "$CHEZMOI_STATE/chezmoi.toml" "$TEST_HOME/.config/chezmoi/chezmoi.toml"
 
 # Remove any stale test .age files from previous crashed test runs
-rm -f "$REPO_DIR/private_dot_ssh/test_roundtrip_key.age" 2>/dev/null
-rm -f "$REPO_DIR/private_dot_ssh/test_wrapper_key.age" 2>/dev/null
+rm -f "$REPO_DIR"/private_dot_ssh/test_roundtrip_key.age "$REPO_DIR"/private_dot_ssh/encrypted_private_test_roundtrip_key.age 2>/dev/null
+rm -f "$REPO_DIR"/private_dot_ssh/test_wrapper_key.age "$REPO_DIR"/private_dot_ssh/encrypted_private_test_wrapper_key.age 2>/dev/null
 git -C "$REPO_DIR" checkout -- private_dot_ssh/ 2>/dev/null || true
 
 echo "Applying dotfiles..."
@@ -239,6 +253,15 @@ if [[ -f "$TEST_HOME/.zimrc" ]]; then
     else
         fail "zim init failed" "$(echo "$ZIM_INIT_OUTPUT" | head -3)"
     fi
+fi
+
+# Generate fzf shell integration for the test environment.
+# The zshrc guards bindkeys behind 'zle -la fzf-file-widget', which only
+# passes when fzf keybindings scripts have been sourced.
+if command -v fzf >/dev/null 2>&1; then
+    fzf --zsh > "$TEST_HOME/.fzf.zsh" 2>/dev/null \
+        && pass "fzf: shell integration generated" \
+        || warn "fzf: shell integration generation failed"
 fi
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -407,7 +430,7 @@ chezmoi doctor 2>&1 | grep -q '^error ' && fail "chezmoi doctor has errors" || p
 check_cmd "nvim"
 check_file ".config/nvim/lua/custom/plugins/init.lua" "nvim custom plugins"
 # nvim basic functionality and config syntax
-nvim --headless -c 'quit' 2>/dev/null && pass "nvim: headless startup OK" || warn "nvim: headless startup failed"
+timeout 10 nvim --headless -c 'quit' 2>/dev/null && pass "nvim: headless startup OK" || warn "nvim: headless startup failed"
 if [[ -f "$TEST_HOME/.config/nvim/init.lua" ]]; then
     SYNTAX_RESULT=$(timeout 10 nvim -u NONE --headless --cmd "lua local ok, err = load(io.open('$TEST_HOME/.config/nvim/init.lua'):read('*a')); if ok then print('SYNTAX_OK') else print('SYNTAX_FAIL: '..err) end" -c 'cq' 2>&1) || true
     echo "$SYNTAX_RESULT" | grep -q SYNTAX_OK \
@@ -450,7 +473,7 @@ check_grep ".config/nvim/init.lua" "unnamedplus" "nvim: clipboard=unnamedplus"
 pbcopy -help >/dev/null 2>&1 && pass "clipboard: pbcopy/pbpaste available" || warn "clipboard: pbcopy not found"
 
 # nvim: register \"+ exists
-nvim --headless -c 'lua vim.fn.setreg("+", "TESTREG"); local ok = vim.fn.getreg("+") == "TESTREG"; vim.cmd(ok and "quit" or "cquit")' 2>/dev/null \
+timeout 10 nvim --headless -c 'lua vim.fn.setreg("+", "TESTREG"); local ok = vim.fn.getreg("+") == "TESTREG"; vim.cmd(ok and "quit" or "cquit")' 2>/dev/null \
     && pass "nvim: \"+ register functional" \
     || fail "nvim: \"+ register broken"
 
@@ -703,9 +726,10 @@ header "config add --encrypt workflow (fake key roundtrip)"
 # Source for macOS test is the real repo (chezmoi uses --source "$REPO_DIR")
 SOURCE="$REPO_DIR"
 FAKE_KEY="$TEST_HOME/.ssh/test_roundtrip_key"
-FAKE_KEY_AGE="private_dot_ssh/test_roundtrip_key.age"
+FAKE_KEY_AGE="private_dot_ssh/encrypted_private_test_roundtrip_key.age"
 
 # Step 1: Generate fake SSH key
+rm -f "$FAKE_KEY" "$FAKE_KEY.pub" 2>/dev/null
 ssh-keygen -t ed25519 -f "$FAKE_KEY" -N "" -C "test-key" 2>/dev/null
 if [[ -f "$FAKE_KEY" ]]; then
     pass "keys: fake SSH key generated (macOS)"
@@ -806,10 +830,10 @@ else
 fi
 
 # ── config edit (verify subcommand recognized) ──
-if HOME="$TEST_HOME" chezmoi edit --dry-run "$TEST_HOME/.zshrc" 2>/dev/null; then
+if chezmoi edit --help >/dev/null 2>&1; then
   pass "config: edit subcommand recognized by chezmoi (macOS)"
 else
-  warn "config: edit --dry-run not supported (chezmoi version) (macOS)"
+  warn "config: edit subcommand not available (macOS)"
 fi
 
 # ── config update (verify subcommand exists) ──
@@ -829,9 +853,10 @@ header "config add --encrypt + apply (wrapper roundtrip) (macOS)"
 
 CFG_FAKE_KEY="$TEST_HOME/.ssh/test_wrapper_key"
 CFG_SOURCE="$REPO_DIR"
-CFG_EXPECTED_AGE="private_dot_ssh/test_wrapper_key.age"
+CFG_EXPECTED_AGE="private_dot_ssh/encrypted_private_test_wrapper_key.age"
 
 # Step 1: Generate fake key
+rm -f "$CFG_FAKE_KEY" "$CFG_FAKE_KEY.pub" 2>/dev/null
 ssh-keygen -t ed25519 -f "$CFG_FAKE_KEY" -N "" -C "wrapper-test" 2>/dev/null
 [[ -f "$CFG_FAKE_KEY" ]] && pass "encrypt-via-config: fake key generated (macOS)" || fail "encrypt-via-config: key gen failed (macOS)"
 

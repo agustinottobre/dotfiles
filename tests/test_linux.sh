@@ -26,6 +26,20 @@ fail() { echo -e "  ${RED}✗${NC} $1 — ${2:-}"; FAIL=$((FAIL + 1)); }
 warn() { echo -e "  ${YELLOW}⚠${NC} $1 — ${2:-}"; WARN=$((WARN + 1)); }
 header() { echo ""; echo -e "${CYAN}── $1 ──${NC}"; }
 
+# macOS/Linux: define timeout fallback if missing.
+if ! command -v timeout >/dev/null 2>&1; then
+    timeout() {
+        local t="$1"; shift
+        "$@" &
+        local pid=$!
+        ( sleep "$t"; kill $pid 2>/dev/null ) &
+        wait $pid 2>/dev/null
+        local ret=$?
+        kill $! 2>/dev/null
+        return "${ret:-143}"
+    }
+fi
+
 # ── Exec helpers ─────────────────────────────────────────────────────────────
 zsh_exec()  { HOME="$TARGET_HOME" ZDOTDIR="$TARGET_HOME" zsh -l -i -c "$1" 2>&1 | grep -v "can't change option: zle" | grep -v "Detected a new version" || true; }
 bash_exec() { HOME="$TARGET_HOME" bash -l -i -c "$1" 2>&1 || true; }
@@ -94,6 +108,10 @@ echo -e "${CYAN}═════════════════════�
 #  PHASE 1: Deploy
 # ═════════════════════════════════════════════════════════════════════════════
 header "Deploying dotfiles"
+# Remove any stale test .age files from previous crashed test runs
+rm -f "$REPO_DIR"/private_dot_ssh/test_roundtrip_key.age "$REPO_DIR"/private_dot_ssh/encrypted_private_test_roundtrip_key.age 2>/dev/null
+rm -f "$REPO_DIR"/private_dot_ssh/test_wrapper_key.age "$REPO_DIR"/private_dot_ssh/encrypted_private_test_wrapper_key.age 2>/dev/null
+git -C "$REPO_DIR" checkout -- private_dot_ssh/ 2>/dev/null || true
 cp -a "$REPO_DIR" "$TARGET_HOME/dotfiles"
 
 header "Running bootstrap.sh"
@@ -260,6 +278,13 @@ for mod in environment git input termtitle utility zim-starship completion \
     dir_test ".zim/modules/$mod" && pass "Zim: $mod" || fail "Zim: $mod missing"
 done
 
+# Generate fzf shell integration for the test environment
+if command -v fzf >/dev/null 2>&1; then
+    fzf --zsh > "$TARGET_HOME/.fzf.zsh" 2>/dev/null \
+        && pass "fzf: shell integration generated" \
+        || warn "fzf: shell integration generation failed"
+fi
+
 header "Zsh fpath"
 zsh_exec 'echo $fpath | grep -q "/usr/local/share/zsh/site-functions"' >/dev/null 2>&1 \
     && pass 'fpath includes site-functions' || warn 'fpath: site-functions not found'
@@ -276,7 +301,7 @@ which nvim >/dev/null 2>&1 && pass "nvim: $(nvim --version 2>&1 | head -1)" || f
 check_file ".config/nvim/lua/custom/plugins/init.lua" "nvim custom plugins"
 
 # nvim: basic functionality
-nvim --headless -c 'quit' 2>/dev/null && pass "nvim: headless startup OK" || warn "nvim: headless startup failed (runtime may be broken)"
+timeout 10 nvim --headless -c 'quit' 2>/dev/null && pass "nvim: headless startup OK" || warn "nvim: headless startup failed (runtime may be broken)"
 
 # nvim: Lua config syntax
 CHECK_INIT="$TARGET_HOME/.config/nvim/init.lua"
@@ -324,7 +349,7 @@ xsel --version >/dev/null 2>&1 || xclip -version >/dev/null 2>&1 \
     && pass "clipboard: xsel or xclip available" || warn "clipboard: neither xsel nor xclip found"
 
 # nvim: register "+ exists (system clipboard integration)
-nvim --headless -c 'lua vim.fn.setreg("+", "TESTREG"); local ok = vim.fn.getreg("+") == "TESTREG"; vim.cmd(ok and "quit" or "cquit")' 2>/dev/null \
+timeout 10 nvim --headless -c 'lua vim.fn.setreg("+", "TESTREG"); local ok = vim.fn.getreg("+") == "TESTREG"; vim.cmd(ok and "quit" or "cquit")' 2>/dev/null \
     && pass "nvim: \"+ register functional" \
     || fail "nvim: \"+ register broken"
 
@@ -585,12 +610,13 @@ header "config add --encrypt workflow (fake key roundtrip)"
 
 # Generate a fake SSH key for testing
 FAKE_KEY="$TARGET_HOME/.ssh/test_roundtrip_key"
-FAKE_KEY_AGE="private_dot_ssh/test_roundtrip_key.age"
+FAKE_KEY_AGE="private_dot_ssh/encrypted_private_test_roundtrip_key.age"
 
 # Set up chezmoi source path
 SOURCE="$TARGET_HOME/dotfiles"
 
 # Step 1: Generate fake SSH key
+rm -f "$FAKE_KEY" "$FAKE_KEY.pub" 2>/dev/null
 ssh-keygen -t ed25519 -f "$FAKE_KEY" -N "" -C "test-key" 2>/dev/null
 if [[ -f "$FAKE_KEY" ]]; then
     pass "keys: fake SSH key generated"
@@ -686,11 +712,10 @@ else
 fi
 
 # ── config edit (verify subcommand recognized) ──
-# Can't test interactive editor, but verify chezmoi accepts the edit subcommand
-if HOME="$TARGET_HOME" chezmoi edit --dry-run "$TARGET_HOME/.zshrc" 2>/dev/null; then
+if chezmoi edit --help >/dev/null 2>&1; then
   pass "config: edit subcommand recognized by chezmoi"
 else
-  warn "config: edit --dry-run not supported (chezmoi version)"
+  warn "config: edit subcommand not available (chezmoi version)"
 fi
 
 # ── config update (verify chezmoi update subcommand exists) ──
@@ -710,10 +735,11 @@ zsh_exec 'config nonexistent_cmd 2>/dev/null; echo EXIT:$?' | grep -q 'EXIT:1' \
 header "config add --encrypt + apply (wrapper roundtrip)"
 
 CFG_FAKE_KEY="$TARGET_HOME/.ssh/test_wrapper_key"
-CFG_EXPECTED_AGE="private_dot_ssh/test_wrapper_key.age"
+CFG_EXPECTED_AGE="private_dot_ssh/encrypted_private_test_wrapper_key.age"
 CFG_SOURCE="$TARGET_HOME/dotfiles"
 
 # Step 1: Generate fake key
+rm -f "$CFG_FAKE_KEY" "$CFG_FAKE_KEY.pub" 2>/dev/null
 ssh-keygen -t ed25519 -f "$CFG_FAKE_KEY" -N "" -C "wrapper-test" 2>/dev/null
 [[ -f "$CFG_FAKE_KEY" ]] && pass "encrypt-via-config: fake key generated" || fail "encrypt-via-config: key gen failed"
 
