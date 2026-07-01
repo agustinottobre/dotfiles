@@ -1,5 +1,5 @@
 # OS-specific package lists. Add packages here to install them on next apply.
-# The run_once_install-packages.sh.tmpl script reads this file.
+# The run_onchange_install-packages.sh.tmpl script reads this file.
 packages:
   linux:
     apt:
@@ -15,7 +15,7 @@ packages:
     - fzf
     - fd-find
     - age
-    - task
+    - taskwarrior
   darwin:
     brew:
     - ripgrep

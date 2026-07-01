@@ -145,8 +145,8 @@ nvim --headless +'Lazy sync' +quit
 $(brew --prefix)/opt/fzf/install    # macOS
 ~/.fzf/install                      # Linux
 
-# Reset run_once scripts (force re-install)
-chezmoi state delete-bucket --bucket=scriptState
+# Reset run_onchange scripts (force re-install after template changes)
+chezmoi state delete-bucket --bucket=entryState
 ```
 
 ## Clipboard (nvim + tmux)

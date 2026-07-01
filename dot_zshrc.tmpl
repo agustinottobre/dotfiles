@@ -48,9 +48,12 @@ elif [[ -f /opt/homebrew/share/fzf/key-bindings.zsh ]]; then
 fi
 
 # Explicitly bind fzf keys (ensures they work if overridden elsewhere)
-bindkey '^X^F' fzf-file-widget
-bindkey '^R' fzf-history-widget
-bindkey '^T' fzf-file-widget
+# Only bind if the widgets actually exist (fzf may not be installed)
+if zle -l fzf-file-widget >/dev/null 2>&1; then
+  bindkey '^X^F' fzf-file-widget
+  bindkey '^R' fzf-history-widget
+  bindkey '^T' fzf-file-widget
+fi
 
 {{- if eq .chezmoi.os "darwin" }}
 # Dart completion
@@ -106,7 +109,11 @@ else
     NVIM_PATH='nvim'  # fallback to PATH lookup
 fi
 {{- else }}
-NVIM_PATH="$HOME/.local/bin/nvim"
+if [[ -x "$HOME/.local/bin/nvim" ]]; then
+    NVIM_PATH="$HOME/.local/bin/nvim"
+else
+    NVIM_PATH='nvim'  # fallback to PATH lookup
+fi
 {{- end }}
 alias vi=$NVIM_PATH
 alias vim=$NVIM_PATH
@@ -142,10 +149,19 @@ function config(){
   if [[ $# == 0 ]]
   then
     # Fuzzy-find and edit a managed dotfile
+    if ! command -v fzf >/dev/null 2>&1; then
+      echo "config: fzf is required but not installed." >&2
+      return 1
+    fi
     local f
-    f=$(chezmoi managed | fzf --height 40% --layout=reverse)
+    f=$(chezmoi managed 2>/dev/null | fzf --height 40% --layout=reverse) || return 1
     [[ -n "$f" ]] && chezmoi edit "$HOME/$f"
   else
+    # Passthrough to chezmoi
+    if ! chezmoi source-path >/dev/null 2>&1; then
+      echo "config: chezmoi source directory not found. Run bootstrap.sh first." >&2
+      return 1
+    fi
     chezmoi "$@"
   fi
 }
@@ -157,7 +173,7 @@ function wiki-list-select(){
 
   for DIR in $wiki $wiki_work
   do
-    if [ $(isDirEmpty "$DIR") -eq 0 ]
+    [[ -d "$DIR" ]] && if [ $(isDirEmpty "$DIR") -eq 0 ]
     then
       if [ -z $wiki_list ]
       then
@@ -181,6 +197,10 @@ function isDirEmpty(){
 
 function wiki(){
   local wiki_selected=$(wiki-list-select)
+  if [[ -z "$wiki_selected" ]]; then
+    echo "wiki: No wiki directory found. Create ~/wiki or ~/wiki_work first." >&2
+    return 1
+  fi
   if [[ $# == 0 ]]
   then
     vim $wiki_selected/index.md

@@ -43,7 +43,13 @@ echo ""
 # 1. Install chezmoi
 info "Installing chezmoi..."
 if ! command -v chezmoi >/dev/null 2>&1; then
-    curl -sSL https://get.chezmoi.io | sh -s -- -b /usr/local/bin
+    if [ -w /usr/local/bin ]; then
+        curl -sSL https://get.chezmoi.io | sh -s -- -b /usr/local/bin
+    else
+        mkdir -p "$HOME/.local/bin"
+        curl -sSL https://get.chezmoi.io | sh -s -- -b "$HOME/.local/bin"
+        warn "Chezmoi installed to ~/.local/bin. Add ~/.local/bin to your PATH if not already present."
+    fi
     info "Chezmoi installed."
 else
     info "Chezmoi already installed."
@@ -55,6 +61,9 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ ! -d "$REPO_DIR/.git" ]; then
     warn "Not a git repository. Initialize with: git init && git remote add origin <your-repo-url>"
 fi
+
+info "Dotfiles repo at: $REPO_DIR"
+info "Export DOTFILES_REPO=$REPO_DIR for chezmoi update commands"
 
 # 3. Initialize and apply
 info "Initializing chezmoi from $REPO_DIR..."
@@ -82,6 +91,6 @@ echo "  2. Or source: source ~/.zshrc"
 echo "  3. For tmux: prefix + I to install plugins"
 echo ""
 info "To update dotfiles later:"
-echo "  chezmoi update --source=$REPO_DIR"
-echo "  chezmoi apply --source=$REPO_DIR"
+echo "  export DOTFILES_REPO=$REPO_DIR"
+echo "  chezmoi update --source=\$DOTFILES_REPO && chezmoi apply --source=\$DOTFILES_REPO"
 echo ""

@@ -556,6 +556,303 @@ else
     warn "Homebrew not detected"
 fi
 
+# ── config() function ─────────────────────────────────────────────────────────
+header "config() function"
+
+# config function must exist
+zsh_test 'whence -f config >/dev/null 2>&1 && echo OK' | grep -q OK && pass "config: function defined" || fail "config: function defined"
+
+# config passthrough: 'config source-path' should succeed after init
+if zsh_test 'config source-path' | grep -q '.local/share/chezmoi'; then
+  pass "config: passthrough to chezmoi works"
+else
+  fail "config: passthrough to chezmoi works"
+fi
+
+# FZF availability check in config() (no-args path)
+grep -q 'command -v fzf' "$TEST_HOME/.zshrc" && pass "config: fzf availability check in .zshrc" || fail "config: fzf check missing"
+
+# Chezmoi source check in config() (passthrough path)
+grep -q 'chezmoi source-path' "$TEST_HOME/.zshrc" && pass "config: source-path check before passthrough" || fail "config: source-path check missing"
+
+# config passthrough: err on non-existent chezmoi subcommand
+zsh_test 'config nonexistent_cmd 2>/dev/null; echo $?' | grep -q '1' && pass "config: errors on invalid chezmoi subcommand (macOS)" || warn "config: errors on invalid chezmoi subcommand (macOS)"
+
+# ── wiki() function ───────────────────────────────────────────────────────────
+header "wiki() function"
+
+# wiki function must exist
+zsh_test 'whence -f wiki >/dev/null 2>&1 && echo OK' | grep -q OK && pass "wiki: function defined" || fail "wiki: function defined"
+
+# No wiki dirs: should error gracefully, NOT try to open /index.md
+zsh_test 'wiki 2>&1; echo EXIT:$?' | grep -q 'No wiki directory found' && pass "wiki: errors gracefully when no wiki dir exists" || fail "wiki: errors gracefully when no wiki dir exists"
+
+# Directory existence guard in wiki-list-select
+grep -q '\[\[ -d "\$DIR" \]\]' "$TEST_HOME/.zshrc" && pass "wiki: directory existence guard present" || fail "wiki: directory guard missing"
+
+# Empty selection guard in wiki()
+grep -q '\[\[ -z "\$wiki_selected" \]\]' "$TEST_HOME/.zshrc" && pass "wiki: empty selection guard present" || fail "wiki: empty selection guard missing"
+
+# ── .chezmoi.toml.tmpl validation ─────────────────────────────────────────────
+header ".chezmoi.toml.tmpl"
+
+# Special file exists at repo root
+[[ -f "$REPO_DIR/.chezmoi.toml.tmpl" ]] && pass "chezmoi: .chezmoi.toml.tmpl exists" || fail "chezmoi: .chezmoi.toml.tmpl missing"
+
+# sourceDir is in the template
+grep -q 'sourceDir' "$REPO_DIR/.chezmoi.toml.tmpl" && pass "chezmoi: sourceDir in init template" || fail "chezmoi: sourceDir missing from init template"
+
+# sourceDir uses template variable
+grep -q 'chezmoi.sourceDir' "$REPO_DIR/.chezmoi.toml.tmpl" && pass "chezmoi: sourceDir uses chezmoi.sourceDir variable" || fail "chezmoi: sourceDir should use template variable"
+
+# Old managed file is GONE (the managed version should not exist)
+! [[ -f "$REPO_DIR/dot_config/chezmoi/private_chezmoi.toml.tmpl" ]] && pass "chezmoi: old managed config file removed" || fail "chezmoi: old managed config still present"
+
+# Old directory is gone
+! [[ -d "$REPO_DIR/dot_config/chezmoi" ]] && pass "chezmoi: old dot_config/chezmoi dir removed" || fail "chezmoi: old dot_config/chezmoi dir still present"
+
+# ── run_onchange_install-packages.sh.tmpl ─────────────────────────────────────
+header "run_onchange validation"
+
+# Script is now run_onchange
+[[ -f "$REPO_DIR/run_onchange_install-packages.sh.tmpl" ]] && pass "run_onchange: script renamed correctly" || fail "run_onchange: missing"
+! [[ -f "$REPO_DIR/run_once_install-packages.sh.tmpl" ]] && pass "run_onchange: old run_once removed" || warn "run_onchange: old run_once still present"
+
+# check_fail function exists
+grep -q 'check_fail()' "$REPO_DIR/run_onchange_install-packages.sh.tmpl" && pass "run_onchange: check_fail function present" || fail "run_onchange: check_fail missing"
+
+# Summary output exists
+grep -q 'Package Installation Summary' "$REPO_DIR/run_onchange_install-packages.sh.tmpl" && pass "run_onchange: summary output present" || fail "run_onchange: summary missing"
+
+# FAILED counter exists in macOS section
+grep -q 'FAILED=' "$REPO_DIR/run_onchange_install-packages.sh.tmpl" && pass "run_onchange: FAILED= counter present (macOS)" || fail "run_onchange: FAILED= missing in macOS section"
+
+# ── FZF bindkey guards ────────────────────────────────────────────────────────
+header "FZF bindkey guards"
+
+# zle -l guard exists around explicit fzf bindings
+grep -q 'zle -l fzf-file-widget' "$TEST_HOME/.zshrc" && pass "fzf: bindkey guarded by zle -l check" || fail "fzf: missing zle -l guard on bindkeys"
+
+# Verify bindkeys appear after the guard
+zle_lineno=$(grep -n 'zle -l fzf-file-widget' "$TEST_HOME/.zshrc" | cut -d: -f1 | head -1)
+bindkey_lineno=$(grep -n "bindkey.*fzf-file-widget" "$TEST_HOME/.zshrc" | cut -d: -f1 | head -1)
+if [[ "$bindkey_lineno" -gt "$zle_lineno" ]]; then
+  pass "fzf: bindkeys are inside the zle guard (macOS)"
+else
+  warn "fzf: bindkey placement unclear (macOS)"
+fi
+
+# ── bootstrap.sh validation ───────────────────────────────────────────────────
+header "bootstrap.sh validation"
+
+bootstrap="$REPO_DIR/bootstrap.sh"
+
+# DOTFILES_REPO is mentioned
+grep -q 'DOTFILES_REPO' "$bootstrap" && pass "bootstrap: DOTFILES_REPO in output" || fail "bootstrap: DOTFILES_REPO missing"
+
+# ~/.local/bin fallback for non-sudo install
+grep -q '\.local/bin' "$bootstrap" && pass "bootstrap: ~/.local/bin fallback present" || fail "bootstrap: ~/.local/bin fallback missing"
+
+# /usr/local/bin writability check
+grep -q '\-w /usr/local/bin' "$bootstrap" && pass "bootstrap: /usr/local/bin writability check present" || fail "bootstrap: writability check missing"
+
+# ── Linux template validation (cross-platform) ────────────────────────────────
+header "Linux template validation (cross-platform correctness)"
+
+linux_in_source_excluded_on_macos() {
+    local tmpl="$REPO_DIR/$1" pattern="$2" label="$3"
+    # Check 1: pattern exists in source
+    grep -qF "$pattern" "$tmpl" 2>/dev/null || { warn "$label — not in source (expected)" ; return; }
+    # Check 2: pattern is NOT in macOS render
+    if chezmoi execute-template < "$tmpl" 2>/dev/null | grep -qF "$pattern"; then
+        fail "$label — renders on macOS (Linux-only block leaked)"
+    else
+        pass "$label"
+    fi
+}
+
+linux_in_source_excluded_on_macos "dot_zshenv.tmpl" 'fdfind --type f'            "zshenv: Linux fdfind in source, excluded on macOS"
+linux_in_source_excluded_on_macos "dot_zshenv.tmpl" 'unset FPATH'                "zshenv: Linux FPATH fix in source, excluded on macOS"
+linux_in_source_excluded_on_macos "dot_zshrc.tmpl"  'date -d "@$1"'              "zshrc: Linux GNU date in source, excluded on macOS"
+linux_in_source_excluded_on_macos "dot_zprofile.tmpl" '/usr/local/sbin'          "zprofile: Linux /usr/local paths, excluded on macOS"
+
+# ── config add --encrypt workflow (fake key roundtrip) ────────────────────────
+header "config add --encrypt workflow (fake key roundtrip)"
+
+# Source repo was copied to $TEST_HOME/dotfiles during setup
+SOURCE="$TEST_HOME/dotfiles"
+FAKE_KEY="$TEST_HOME/.ssh/test_roundtrip_key"
+FAKE_KEY_AGE="private_dot_ssh/test_roundtrip_key.age"
+
+# Step 1: Generate fake SSH key
+ssh-keygen -t ed25519 -f "$FAKE_KEY" -N "" -C "test-key" 2>/dev/null
+if [[ -f "$FAKE_KEY" ]]; then
+    pass "keys: fake SSH key generated (macOS)"
+else
+    fail "keys: failed to generate fake SSH key (macOS)"
+fi
+
+# Step 2: Encrypt with chezmoi
+if HOME="$TEST_HOME" chezmoi add --encrypt --source "$SOURCE" --destination "$TEST_HOME" --force "$FAKE_KEY" 2>/dev/null; then
+    pass "keys: config add --encrypt succeeded (macOS)"
+else
+    fail "keys: config add --encrypt failed (macOS)"
+fi
+
+# Step 3: Verify .age file exists in source
+if [[ -f "$SOURCE/$FAKE_KEY_AGE" ]]; then
+    pass "keys: .age file created in source (macOS)"
+else
+    fail "keys: .age file not created at $SOURCE/$FAKE_KEY_AGE (macOS)"
+fi
+
+# Step 4: Verify .age file is NOT placeholder text (should be encrypted binary)
+if [[ -f "$SOURCE/$FAKE_KEY_AGE" ]]; then
+    if grep -q 'PLACEHOLDER\|REPLACE WITH' "$SOURCE/$FAKE_KEY_AGE" 2>/dev/null; then
+        fail "keys: .age file still contains placeholder text (macOS)"
+    else
+        pass "keys: .age file is encrypted (no placeholder text) (macOS)"
+    fi
+fi
+
+# Step 5: Apply with chezmoi (decrypts to destination)
+if HOME="$TEST_HOME" chezmoi apply --source "$SOURCE" --destination "$TEST_HOME" --force 2>/dev/null; then
+    pass "keys: chezmoi apply after encrypt succeeded (macOS)"
+else
+    warn "keys: chezmoi apply after encrypt returned non-zero (macOS)"
+fi
+
+# Step 6: Verify decrypted file exists WITHOUT .age extension
+if [[ -f "$FAKE_KEY" ]]; then
+    pass "keys: decrypted file exists (no .age extension) (macOS)"
+else
+    fail "keys: decrypted file missing (decrypt failed) (macOS)"
+fi
+
+# Step 7: Verify decrypted content is valid SSH key
+if [[ -f "$FAKE_KEY" ]]; then
+    if head -1 "$FAKE_KEY" | grep -q 'BEGIN OPENSSH PRIVATE KEY'; then
+        pass "keys: decrypted content is valid SSH private key (macOS)"
+    else
+        fail "keys: decrypted content is not valid SSH key (macOS)"
+    fi
+fi
+
+# Step 8: Verify permissions are 0600
+if [[ -f "$FAKE_KEY" ]]; then
+    perms=$(stat -f '%Lp' "$FAKE_KEY" 2>/dev/null || stat -c '%a' "$FAKE_KEY" 2>/dev/null)
+    if [[ "$perms" == "600" ]]; then
+        pass "keys: private key permissions are 0600 (macOS)"
+    else
+        warn "keys: private key permissions are $perms (expected 600) (macOS)"
+    fi
+fi
+
+# Step 9: Verify .age file is NOT present in deployed ~/.ssh/ (should be decrypted, not .age)
+if [[ -f "$TEST_HOME/.ssh/test_roundtrip_key.age" ]]; then
+    fail "keys: .age file leaked to ~/.ssh/ (should be decrypted without .age)"
+else
+    pass "keys: no .age extension in deployed destination"
+fi
+
+# Cleanup
+rm -f "$SOURCE/$FAKE_KEY_AGE" 2>/dev/null
+rm -f "$FAKE_KEY" "$FAKE_KEY.pub" 2>/dev/null
+
+# ── config wrapper subcommands (daily workflow) ───────────────────────────────
+header "config wrapper subcommands (daily workflow)"
+
+# Source for macOS test (copied to TEST_HOME during setup)
+TEST_SOURCE="$TEST_HOME/dotfiles"
+
+# ── config diff ──
+if zsh_test 'config diff 2>&1; echo EXIT:$?' | grep -q 'EXIT:0'; then
+  pass "config: diff runs successfully (macOS)"
+else
+  warn "config: diff returned non-zero (may have pending changes) (macOS)"
+fi
+
+# ── config apply (idempotent) ──
+if zsh_test 'config apply 2>&1; echo EXIT:$?' | grep -q 'EXIT:0'; then
+  pass "config: apply runs successfully (macOS)"
+else
+  warn "config: apply returned non-zero (macOS)"
+fi
+
+# ── config commit ── (safe: commits to test copy, not real repo)
+# Touch a managed file to create a change
+echo '# test commit marker' >> "$TEST_HOME/.zshrc"
+HOME="$TEST_HOME" chezmoi add --source "$TEST_SOURCE" --destination "$TEST_HOME" --force "$TEST_HOME/.zshrc" 2>/dev/null || true
+zsh_test 'config commit -m "test: config commit wrapper test" 2>&1; echo EXIT:$?' | grep -q 'EXIT:0' \
+  && pass "config: commit -m works through wrapper (macOS)" \
+  || warn "config: commit -m may have failed (git config, no changes, etc.) (macOS)"
+
+# ── config edit (verify subcommand recognized) ──
+if HOME="$TEST_HOME" chezmoi edit --dry-run "$TEST_HOME/.zshrc" 2>/dev/null; then
+  pass "config: edit subcommand recognized by chezmoi (macOS)"
+else
+  warn "config: edit --dry-run not supported (chezmoi version) (macOS)"
+fi
+
+# ── config update (verify subcommand exists) ──
+if chezmoi update --help >/dev/null 2>&1; then
+  pass "config: update subcommand recognized (macOS)"
+else
+  warn "config: update --help not available (macOS)"
+fi
+
+# ── config passthrough: invalid subcommand returns non-zero ──
+zsh_test 'config nonexistent_cmd 2>/dev/null; echo EXIT:$?' | grep -q 'EXIT:1' \
+  && pass "config: invalid subcommand returns error (macOS)" \
+  || warn "config: invalid subcommand exit behavior (macOS)"
+
+# ── config add --encrypt + apply (wrapper roundtrip) ─────────────────────────
+header "config add --encrypt + apply (wrapper roundtrip) (macOS)"
+
+CFG_FAKE_KEY="$TEST_HOME/.ssh/test_wrapper_key"
+CFG_SOURCE="$TEST_HOME/dotfiles"
+CFG_EXPECTED_AGE="private_dot_ssh/test_wrapper_key.age"
+
+# Step 1: Generate fake key
+ssh-keygen -t ed25519 -f "$CFG_FAKE_KEY" -N "" -C "wrapper-test" 2>/dev/null
+[[ -f "$CFG_FAKE_KEY" ]] && pass "encrypt-via-config: fake key generated (macOS)" || fail "encrypt-via-config: key gen failed (macOS)"
+
+# Step 2: config add --encrypt (THE documented command)
+zsh_test "config add --encrypt '$CFG_FAKE_KEY'" 2>/dev/null
+if [[ -f "$CFG_SOURCE/$CFG_EXPECTED_AGE" ]]; then
+    pass "encrypt-via-config: .age file created via config add --encrypt (macOS)"
+else
+    fail "encrypt-via-config: config add --encrypt did not create .age file (macOS)"
+fi
+
+# Step 3: Verify .age is encrypted (not placeholder)
+if [[ -f "$CFG_SOURCE/$CFG_EXPECTED_AGE" ]]; then
+    if grep -q 'PLACEHOLDER\|REPLACE WITH' "$CFG_SOURCE/$CFG_EXPECTED_AGE" 2>/dev/null; then
+        fail "encrypt-via-config: .age file is placeholder text (macOS)"
+    else
+        pass "encrypt-via-config: .age file is encrypted binary (macOS)"
+    fi
+fi
+
+# Step 4: config apply (THE documented command)
+zsh_test "config apply" 2>/dev/null
+if [[ -f "$CFG_FAKE_KEY" ]]; then
+    if head -1 "$CFG_FAKE_KEY" 2>/dev/null | grep -q 'BEGIN OPENSSH PRIVATE KEY'; then
+        pass "encrypt-via-config: key decrypted via config apply (macOS)"
+    else
+        fail "encrypt-via-config: decrypted key has invalid content (macOS)"
+    fi
+else
+    fail "encrypt-via-config: config apply did not decrypt key (macOS)"
+fi
+
+# Step 5: Verify NO .age leaked to ~/.ssh/
+[[ ! -f "$TEST_HOME/.ssh/test_wrapper_key.age" ]] && pass "encrypt-via-config: no .age in ~/.ssh/ (macOS)" || fail "encrypt-via-config: .age leaked (macOS)"
+
+# Cleanup
+rm -f "$CFG_SOURCE/$CFG_EXPECTED_AGE" 2>/dev/null
+rm -f "$CFG_FAKE_KEY" "$CFG_FAKE_KEY.pub" 2>/dev/null
+
 # ═════════════════════════════════════════════════════════════════════════════
 echo ""
 echo -e "${CYAN}══════════════════════════════════════════════${NC}"

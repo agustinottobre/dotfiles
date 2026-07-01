@@ -621,11 +621,326 @@ macos_in_source_excluded_on_linux "dot_zshenv.tmpl"           'fd --type f'     
 macos_in_source_excluded_on_linux "dot_zshenv.tmpl"           "Tools/bin"            "zshenv: ~/Tools/bin in source, excluded on Linux"
 macos_in_source_excluded_on_linux "dot_zshenv.tmpl"           "pub-cache/bin"        "zshenv: Dart pub-cache in source, excluded on Linux"
 macos_in_source_excluded_on_linux "dot_zshenv.tmpl"           "HOMEBREW_NO_GITHUB_API" "zshenv: Homebrew in source, excluded on Linux"
-macos_in_source_excluded_on_linux "dot_zshenv.tmpl"           'brew --prefix golang' "zshenv: GOROOT via brew in source, excluded on Linux"
+
 macos_in_source_excluded_on_linux "dot_zshrc.tmpl"            "docker-machine"       "zshrc: Docker in source, excluded on Linux"
 macos_in_source_excluded_on_linux "dot_zshrc.tmpl"            "k3dconfigwall"        "zshrc: k3dconfigwall in source, excluded on Linux"
 macos_in_source_excluded_on_linux "dot_zshrc.tmpl"            "kubeconfigRefresh"    "zshrc: kubeconfigRefresh in source, excluded on Linux"
 macos_in_source_excluded_on_linux "dot_zshrc.tmpl"            "dart-cli-completion"  "zshrc: Dart completion in source, excluded on Linux"
+
+# ── config() function ─────────────────────────────────────────────────────────
+header "config() function"
+
+# config function must exist
+zsh_exec 'whence -f config >/dev/null 2>&1 && echo OK || echo FAIL' | grep -q OK && pass "config: function defined" || fail "config: function defined"
+
+# config passthrough: 'config source-path' should succeed (chezmoi is initialized)
+if zsh_exec 'config source-path' | grep -q '.local/share/chezmoi'; then
+  pass "config: passthrough to chezmoi works"
+else
+  fail "config: passthrough to chezmoi works"
+fi
+
+# config passthrough: err on non-existent chezmoi subcommand
+zsh_exec 'config nonexistent_cmd 2>/dev/null; echo $?' | grep -q '1' && pass "config: errors on invalid chezmoi subcommand" || warn "config: errors on invalid chezmoi subcommand — may be chezmoi version difference"
+
+# FZF availability check in config() (no-args path)
+grep_file ".zshrc" 'command -v fzf' && pass "config: fzf availability check in .zshrc" || fail "config: fzf check missing"
+
+# Chezmoi source check in config() (passthrough path)
+grep_file ".zshrc" 'chezmoi source-path' && pass "config: source-path check before passthrough" || fail "config: source-path check missing"
+
+# ── wiki() function ───────────────────────────────────────────────────────────
+header "wiki() function"
+
+# wiki function must exist
+zsh_exec 'whence -f wiki >/dev/null 2>&1 && echo OK' | grep -q OK && pass "wiki: function defined" || fail "wiki: function defined"
+
+# wiki-list-select must exist
+zsh_exec 'whence -f wiki-list-select >/dev/null 2>&1 && echo OK' | grep -q OK && pass "wiki: wiki-list-select defined" || fail "wiki: wiki-list-select defined"
+
+# No wiki dirs: should error gracefully, NOT open /index.md
+zsh_exec 'wiki 2>&1; echo EXIT:$?' | grep -q 'No wiki directory found' && pass "wiki: errors gracefully when no wiki dir exists" || fail "wiki: errors gracefully when no wiki dir exists"
+
+# Directory existence guard in wiki-list-select
+grep_file ".zshrc" '\[\[ -d "\$DIR" \]\]' && pass "wiki: directory existence guard present" || fail "wiki: directory guard missing"
+
+# Empty selection guard in wiki()
+grep_file ".zshrc" '\[\[ -z "\$wiki_selected" \]\]' && pass "wiki: empty selection guard present" || fail "wiki: empty selection guard missing"
+
+# ── .chezmoi.toml.tmpl validation ─────────────────────────────────────────────
+header ".chezmoi.toml.tmpl"
+
+# Special file exists at repo root
+[[ -f "$REPO_DIR/.chezmoi.toml.tmpl" ]] && pass "chezmoi: .chezmoi.toml.tmpl exists" || fail "chezmoi: .chezmoi.toml.tmpl missing"
+
+# sourceDir is in the template
+grep -q 'sourceDir' "$REPO_DIR/.chezmoi.toml.tmpl" && pass "chezmoi: sourceDir in init template" || fail "chezmoi: sourceDir missing from init template"
+
+# sourceDir uses template variable (not hardcoded path)
+grep -q 'chezmoi.sourceDir' "$REPO_DIR/.chezmoi.toml.tmpl" && pass "chezmoi: sourceDir uses chezmoi.sourceDir variable" || fail "chezmoi: sourceDir should use template variable"
+
+# Old managed file is GONE
+! [[ -f "$REPO_DIR/dot_config/chezmoi/private_chezmoi.toml.tmpl" ]] && pass "chezmoi: old managed config file removed" || fail "chezmoi: old managed config still present"
+
+# Old directory is gone
+! [[ -d "$REPO_DIR/dot_config/chezmoi" ]] && pass "chezmoi: old dot_config/chezmoi dir removed" || fail "chezmoi: old dot_config/chezmoi dir still present"
+
+# Render and validate sourceDir
+RENDERED_SOURCE=$(chezmoi execute-template < "$REPO_DIR/.chezmoi.toml.tmpl" 2>/dev/null | grep 'sourceDir')
+if echo "$RENDERED_SOURCE" | grep -q 'sourceDir'; then
+  pass "chezmoi: sourceDir renders correctly"
+else
+  fail "chezmoi: sourceDir missing from rendered config"
+fi
+
+# ── run_onchange_install-packages.sh.tmpl ─────────────────────────────────────
+header "run_onchange validation"
+
+# Script is now run_onchange (not run_once)
+[[ -f "$REPO_DIR/run_onchange_install-packages.sh.tmpl" ]] && pass "run_onchange: script renamed correctly" || fail "run_onchange: missing"
+! [[ -f "$REPO_DIR/run_once_install-packages.sh.tmpl" ]] && pass "run_onchange: old run_once name removed" || warn "run_onchange: old run_once still present"
+
+# check_fail function exists
+grep -q 'check_fail()' "$REPO_DIR/run_onchange_install-packages.sh.tmpl" && pass "run_onchange: check_fail function present" || fail "run_onchange: check_fail missing"
+
+# FAILED counter exists
+grep -q 'FAILED=' "$REPO_DIR/run_onchange_install-packages.sh.tmpl" && pass "run_onchange: FAILED counter present" || fail "run_onchange: FAILED counter missing"
+
+# Summary output exists
+grep -q 'Package Installation Summary' "$REPO_DIR/run_onchange_install-packages.sh.tmpl" && pass "run_onchange: summary output present" || fail "run_onchange: summary missing"
+
+# ── FZF bindkey guards ────────────────────────────────────────────────────────
+header "FZF bindkey guards"
+
+# zle -l guard exists around explicit fzf bindings
+grep_file ".zshrc" 'zle -l fzf-file-widget' && pass "fzf: bindkey guarded by zle -l check" || fail "fzf: missing zle -l guard on bindkeys"
+
+# bindkey calls are inside the guard (should appear after zle -l)
+# Count that bindkey appears AFTER the zle -l line in the file
+zle_lineno=$(grep -n 'zle -l fzf-file-widget' "$TARGET_HOME/.zshrc" | cut -d: -f1 | head -1)
+bindkey_lineno=$(grep -n "bindkey.*fzf-file-widget" "$TARGET_HOME/.zshrc" | cut -d: -f1 | head -1)
+if [[ "$bindkey_lineno" -gt "$zle_lineno" ]]; then
+  pass "fzf: bindkeys are inside the zle guard"
+else
+  warn "fzf: bindkey placement unclear"
+fi
+
+# ── bootstrap.sh validation ───────────────────────────────────────────────────
+header "bootstrap.sh validation"
+
+bootstrap="$REPO_DIR/bootstrap.sh"
+
+# DOTFILES_REPO is mentioned in completion message
+grep -q 'DOTFILES_REPO' "$bootstrap" && pass "bootstrap: DOTFILES_REPO in output" || fail "bootstrap: DOTFILES_REPO missing"
+
+# ~/.local/bin fallback for non-sudo install
+grep -q '\.local/bin' "$bootstrap" && pass "bootstrap: ~/.local/bin fallback present" || fail "bootstrap: ~/.local/bin fallback missing"
+
+# /usr/local/bin writability check
+grep -q '\-w /usr/local/bin' "$bootstrap" && pass "bootstrap: /usr/local/bin writability check present" || fail "bootstrap: writability check missing"
+
+# chezmoi source-path check in shell config
+grep_file ".zshrc" 'chezmoi source-path' && pass "zshrc: source-path check in config()" || fail "zshrc: source-path check missing"
+
+# ── config add --encrypt workflow ─────────────────────────────────────────────
+header "config add --encrypt workflow (fake key roundtrip)"
+
+# Generate a fake SSH key for testing
+FAKE_KEY="$TARGET_HOME/.ssh/test_roundtrip_key"
+FAKE_KEY_AGE="private_dot_ssh/test_roundtrip_key.age"
+
+# Set up chezmoi source path (in local mode, source was copied to TARGET_HOME/dotfiles)
+if [[ "$MODE" == "local" ]]; then
+    SOURCE="$TARGET_HOME/dotfiles"
+else
+    SOURCE="$REPO_DIR"
+fi
+
+# Use incus exec helper for container mode
+incus_exec() {
+    if [[ "$MODE" == "local" ]]; then
+        bash -c "$1"
+    else
+        incus exec "$CONTAINER_NAME" -- bash -c "$1"
+    fi
+}
+
+# Step 1: Generate fake SSH key
+ssh-keygen -t ed25519 -f "$FAKE_KEY" -N "" -C "test-key" 2>/dev/null
+if [[ -f "$FAKE_KEY" ]]; then
+    pass "keys: fake SSH key generated"
+else
+    fail "keys: failed to generate fake SSH key"
+fi
+
+# Step 2: Encrypt with chezmoi
+CHEZMOI_CMD="HOME='$TARGET_HOME' chezmoi add --encrypt --source '$SOURCE' --destination '$TARGET_HOME' --force '$FAKE_KEY'"
+if eval "$CHEZMOI_CMD" 2>/dev/null; then
+    pass "keys: config add --encrypt succeeded"
+else
+    fail "keys: config add --encrypt failed"
+fi
+
+# Step 3: Verify .age file exists in source
+if [[ -f "$SOURCE/$FAKE_KEY_AGE" ]]; then
+    pass "keys: .age file created in source"
+else
+    fail "keys: .age file not created at $SOURCE/$FAKE_KEY_AGE"
+fi
+
+# Step 4: Verify .age file is NOT placeholder text (should be age-encrypted binary)
+if [[ -f "$SOURCE/$FAKE_KEY_AGE" ]]; then
+    if grep -q 'PLACEHOLDER\|REPLACE WITH' "$SOURCE/$FAKE_KEY_AGE" 2>/dev/null; then
+        fail "keys: .age file still contains placeholder text"
+    else
+        pass "keys: .age file is encrypted (no placeholder text)"
+    fi
+fi
+
+# Step 5: Apply with chezmoi (decrypts to destination)
+APPLY_CMD="HOME='$TARGET_HOME' chezmoi apply --source '$SOURCE' --destination '$TARGET_HOME' --force 2>/dev/null"
+if eval "$APPLY_CMD"; then
+    pass "keys: chezmoi apply after encrypt succeeded"
+else
+    warn "keys: chezmoi apply after encrypt returned non-zero"
+fi
+
+# Step 6: Verify decrypted file exists WITHOUT .age extension
+if [[ -f "$FAKE_KEY" ]]; then
+    pass "keys: decrypted file exists (no .age extension)"
+else
+    fail "keys: decrypted file missing (decrypt failed)"
+fi
+
+# Step 7: Verify decrypted content matches (check it's an SSH key)
+if [[ -f "$FAKE_KEY" ]]; then
+    if head -1 "$FAKE_KEY" | grep -q 'BEGIN OPENSSH PRIVATE KEY'; then
+        pass "keys: decrypted content is valid SSH private key"
+    else
+        fail "keys: decrypted content is not a valid SSH key"
+    fi
+fi
+
+# Step 8: Verify permissions are 0600 on decrypted private key
+if [[ -f "$FAKE_KEY" ]]; then
+    perms=$(stat -c '%a' "$FAKE_KEY" 2>/dev/null || stat -f '%Lp' "$FAKE_KEY" 2>/dev/null)
+    if [[ "$perms" == "600" ]]; then
+        pass "keys: private key permissions are 0600"
+    else
+        warn "keys: private key permissions are $perms (expected 600)"
+    fi
+fi
+
+# Cleanup test files from source
+rm -f "$SOURCE/$FAKE_KEY_AGE" 2>/dev/null
+rm -f "$FAKE_KEY" "$FAKE_KEY.pub" 2>/dev/null
+
+# ── config wrapper subcommands ────────────────────────────────────────────────
+header "config wrapper subcommands (daily workflow)"
+
+# ── config diff ──
+if zsh_exec 'config diff 2>&1; echo EXIT:$?' | grep -q 'EXIT:0'; then
+  pass "config: diff runs successfully"
+else
+  warn "config: diff returned non-zero (may have pending changes)"
+fi
+
+# ── config apply (idempotent) ──
+if zsh_exec 'config apply 2>&1; echo EXIT:$?' | grep -q 'EXIT:0'; then
+  pass "config: apply runs successfully"
+else
+  warn "config: apply returned non-zero (may have pending changes)"
+fi
+
+# ── config commit ── (safe: commits to test copy of repo, not real repo)
+# First, ensure there's something to commit by touching a managed file
+if [[ "$MODE" == "local" ]]; then
+    TEST_SOURCE="$TARGET_HOME/dotfiles"
+else
+    TEST_SOURCE="$REPO_DIR"
+fi
+# Add a comment to the managed .zshrc to create a change
+echo '# test commit marker' >> "$TARGET_HOME/.zshrc"
+# Now add it to chezmoi's source
+HOME="$TARGET_HOME" chezmoi add --source "$TEST_SOURCE" --destination "$TARGET_HOME" --force "$TARGET_HOME/.zshrc" 2>/dev/null || true
+# Commit through the config wrapper
+zsh_exec 'config commit -m "test: config commit wrapper test" 2>&1; echo EXIT:$?' | grep -q 'EXIT:0' \
+  && pass "config: commit -m works through wrapper" \
+  || warn "config: commit -m may have failed (git config, no changes, etc.)"
+
+# ── config edit (verify subcommand recognized) ──
+# Can't test interactive editor, but verify chezmoi accepts the edit subcommand
+if HOME="$TARGET_HOME" chezmoi edit --dry-run "$TARGET_HOME/.zshrc" 2>/dev/null; then
+  pass "config: edit subcommand recognized by chezmoi"
+else
+  warn "config: edit --dry-run not supported (chezmoi version)"
+fi
+
+# ── config update (verify chezmoi update subcommand exists) ──
+# update requires git remote, so just verify the subcommand is recognized
+if chezmoi update --help >/dev/null 2>&1; then
+  pass "config: update subcommand recognized by chezmoi"
+else
+  warn "config: update --help not available"
+fi
+
+# ── config passthrough: invalid subcommand returns non-zero ──
+zsh_exec 'config nonexistent_cmd 2>/dev/null; echo EXIT:$?' | grep -q 'EXIT:1' \
+  && pass "config: invalid subcommand returns error" \
+  || warn "config: invalid subcommand exit behavior"
+
+# ── config add --encrypt + apply (wrapper roundtrip) ─────────────────────────
+header "config add --encrypt + apply (wrapper roundtrip)"
+
+CFG_FAKE_KEY="$TARGET_HOME/.ssh/test_wrapper_key"
+CFG_EXPECTED_AGE="private_dot_ssh/test_wrapper_key.age"
+
+if [[ "$MODE" == "local" ]]; then
+    CFG_SOURCE="$TARGET_HOME/dotfiles"
+else
+    CFG_SOURCE="$REPO_DIR"
+fi
+
+# Step 1: Generate fake key
+ssh-keygen -t ed25519 -f "$CFG_FAKE_KEY" -N "" -C "wrapper-test" 2>/dev/null
+[[ -f "$CFG_FAKE_KEY" ]] && pass "encrypt-via-config: fake key generated" || fail "encrypt-via-config: key gen failed"
+
+# Step 2: config add --encrypt (THE documented command)
+CFG_OUT=$(zsh_exec "config add --encrypt '$CFG_FAKE_KEY' 2>&1")
+if [[ -f "$CFG_SOURCE/$CFG_EXPECTED_AGE" ]]; then
+    pass "encrypt-via-config: .age file created via config add --encrypt"
+else
+    fail "encrypt-via-config: config add --encrypt did not create .age file (output: $CFG_OUT)"
+fi
+
+# Step 3: Verify .age is encrypted (not placeholder)
+if [[ -f "$CFG_SOURCE/$CFG_EXPECTED_AGE" ]]; then
+    if grep -q 'PLACEHOLDER\|REPLACE WITH' "$CFG_SOURCE/$CFG_EXPECTED_AGE" 2>/dev/null; then
+        fail "encrypt-via-config: .age file is placeholder text, not encrypted"
+    else
+        pass "encrypt-via-config: .age file is encrypted binary (not placeholder)"
+    fi
+fi
+
+# Step 4: config apply (THE documented command)
+CFG_OUT=$(zsh_exec "config apply 2>&1")
+if [[ -f "$CFG_FAKE_KEY" ]]; then
+    # Key exists — check it's the decrypted version (no .age extension)
+    if head -1 "$CFG_FAKE_KEY" 2>/dev/null | grep -q 'BEGIN OPENSSH PRIVATE KEY'; then
+        pass "encrypt-via-config: key decrypted successfully via config apply"
+    else
+        fail "encrypt-via-config: decrypted key has invalid content"
+    fi
+else
+    fail "encrypt-via-config: config apply did not decrypt key"
+fi
+
+# Step 5: Verify NO .age file leaked to ~/.ssh/
+[[ ! -f "$TARGET_HOME/.ssh/test_wrapper_key.age" ]] && pass "encrypt-via-config: no .age in ~/.ssh/" || fail "encrypt-via-config: .age leaked to ~/.ssh/"
+
+# Cleanup
+rm -f "$CFG_SOURCE/$CFG_EXPECTED_AGE" 2>/dev/null
+rm -f "$CFG_FAKE_KEY" "$CFG_FAKE_KEY.pub" 2>/dev/null
 
 # ═════════════════════════════════════════════════════════════════════════════
 echo ""

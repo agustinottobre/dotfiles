@@ -1,31 +1,58 @@
 {{ if hasKey . "packages" }}{{ if eq .chezmoi.os "linux" }}#!/bin/bash
 # Package list hash: {{ include ".chezmoidata/packages.yaml" | sha256sum }}
 
+# Error tracking
+FAILED=0
+check_fail() {
+  if [ $? -ne 0 ]; then
+    echo "  ✗ FAILED: $1" >&2
+    FAILED=$((FAILED + 1))
+  else
+    echo "  ✓ OK: $1"
+  fi
+}
+
 # ── System packages (apt) ──────────────────────────────────────────────────
 echo "=== Installing system packages ==="
-sudo apt-get update -qq 2>/dev/null || true
+sudo apt-get update -qq 2>/tmp/apt-errors.log
+check_fail "apt-get update"
 {{ range .packages.linux.apt -}}
-sudo apt-get install -y -qq {{ . | quote }} 2>/dev/null || echo "  (skipped: {{ . }})"
+sudo apt-get install -y -qq {{ . | quote }} 2>/tmp/apt-errors.log
+check_fail "apt-get install: {{ . }}"
 {{ end -}}
 
 # ── FNM (Node version manager) ─────────────────────────────────────────────
 if ! command -v fnm >/dev/null 2>&1; then
     echo "Installing FNM..."
-    curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir "{{ .chezmoi.homeDir }}/.fnm" --skip-shell || true
+    if curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir "{{ .chezmoi.homeDir }}/.fnm" --skip-shell; then
+        echo "  ✓ FNM installed"
+    else
+        echo "  ✗ FAILED: FNM install" >&2
+        FAILED=$((FAILED + 1))
+    fi
 fi
 
 # ── Starship prompt ─────────────────────────────────────────────────────────
 if ! command -v starship >/dev/null 2>&1; then
     echo "Installing Starship..."
-    timeout 60 bash -c 'curl -sS https://starship.dev/install.sh | bash -s -- -y' 2>/dev/null || {
-        curl -fsSL "https://github.com/starship/starship/releases/latest/download/starship-$(uname -m)-unknown-linux-gnu.tar.gz" 2>/dev/null | tar -xzf - -C /usr/local/bin starship 2>/dev/null && chmod +x /usr/local/bin/starship || true
-    }
+    if timeout 60 bash -c 'curl -sS https://starship.dev/install.sh | bash -s -- -y' 2>/dev/null; then
+        echo "  ✓ Starship installed (via install.sh)"
+    else
+        echo "  Starship install.sh failed, trying direct download..."
+        curl -fsSL "https://github.com/starship/starship/releases/latest/download/starship-$(uname -m)-unknown-linux-gnu.tar.gz" 2>/dev/null | tar -xzf - -C /usr/local/bin starship 2>/dev/null && chmod +x /usr/local/bin/starship 2>/dev/null
+        if command -v starship >/dev/null 2>&1; then
+            echo "  ✓ Starship installed (via direct download)"
+        else
+            echo "  ✗ FAILED: Starship install" >&2
+            FAILED=$((FAILED + 1))
+        fi
+    fi
 fi
 
 # ── Neovim (nightly AppImage) ──────────────────────────────────────────────
 install_neovim() {
     local nvim_bin="{{ .chezmoi.homeDir }}/.local/bin/nvim"
-    if command -v nvim >/dev/null 2>&1 && nvim --headless -c 'quit' 2>/dev/null; then return 0; fi
+    if [ -x "{{ .chezmoi.homeDir }}/.local/bin/nvim" ] && "{{ .chezmoi.homeDir }}/.local/bin/nvim" --headless -c 'quit' 2>/dev/null; then return 0; fi
     echo "Installing Neovim (nightly)..."
     mkdir -p "$(dirname "$nvim_bin")" || true
     curl -fsSL -o "$nvim_bin" "https://github.com/neovim/neovim/releases/download/nightly/nvim-linux-x86_64.appimage" || return 0
@@ -42,11 +69,23 @@ install_neovim() {
     fi
 }
 install_neovim
+NVIM_BIN="{{ .chezmoi.homeDir }}/.local/bin/nvim"
+if [ -x "$NVIM_BIN" ] && "$NVIM_BIN" --headless -c 'quit' 2>/dev/null; then
+    echo "  ✓ Neovim installed"
+else
+    echo "  ✗ FAILED: Neovim install" >&2
+    FAILED=$((FAILED + 1))
+fi
 
 # ── TPM (Tmux Plugin Manager) ──────────────────────────────────────────────
 if [ ! -d "{{ .chezmoi.homeDir }}/.tmux/plugins/tpm" ]; then
     echo "Installing TPM..."
-    git clone -q https://github.com/tmux-plugins/tpm "{{ .chezmoi.homeDir }}/.tmux/plugins/tpm" || true
+    if git clone -q https://github.com/tmux-plugins/tpm "{{ .chezmoi.homeDir }}/.tmux/plugins/tpm"; then
+        echo "  ✓ TPM installed"
+    else
+        echo "  ✗ FAILED: TPM install" >&2
+        FAILED=$((FAILED + 1))
+    fi
 fi
 
 # ── Age key ─────────────────────────────────────────────────────────────────
@@ -76,35 +115,76 @@ if [ ! -f "$COMP_DIR/_chezmoi" ]; then
     chezmoi completion zsh > "$COMP_DIR/_chezmoi" 2>/dev/null || true
 fi
 
+echo "============================================"
+echo "  Package Installation Summary"
+echo "============================================"
+if [ $FAILED -eq 0 ]; then
+    echo "  ✓ All packages installed successfully."
+else
+    echo "  ⚠ $FAILED package(s) failed to install. Check output above for details."
+fi
+echo ""
+
 echo "=== Setup Complete ==="
 
 {{ else if eq .chezmoi.os "darwin" }}#!/bin/bash
 # Package list hash: {{ include ".chezmoidata/packages.yaml" | sha256sum }}
 
+# Error tracking
+FAILED=0
+check_fail() {
+  if [ $? -ne 0 ]; then
+    echo "  ✗ FAILED: $1" >&2
+    FAILED=$((FAILED + 1))
+  else
+    echo "  ✓ OK: $1"
+  fi
+}
+
 # ── System packages (Homebrew) ─────────────────────────────────────────────
 echo "=== Installing system packages ==="
 if command -v brew >/dev/null 2>&1; then
-    brew update -q 2>/dev/null || true
+    brew update -q 2>/tmp/brew-errors.log
+    check_fail "brew update"
 {{ range .packages.darwin.brew -}}
-    brew install -q {{ . | quote }} 2>/dev/null || echo "  (skipped: {{ . }})"
+    brew install -q {{ . | quote }} 2>/tmp/brew-errors.log
+    check_fail "brew install: {{ . }}"
 {{ end -}}
 fi
 
 # ── FNM (Node version manager) ─────────────────────────────────────────────
 if ! command -v fnm >/dev/null 2>&1; then
     echo "Installing FNM..."
-    curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir "{{ .chezmoi.homeDir }}/.fnm" --skip-shell || true
+    if curl -fsSL https://fnm.vercel.app/install | bash -s -- --install-dir "{{ .chezmoi.homeDir }}/.fnm" --skip-shell; then
+        echo "  ✓ FNM installed"
+    else
+        echo "  ✗ FAILED: FNM install" >&2
+        FAILED=$((FAILED + 1))
+    fi
 fi
 
 # ── Starship prompt ─────────────────────────────────────────────────────────
 if ! command -v starship >/dev/null 2>&1; then
     echo "Installing Starship..."
-    curl -sS https://starship.dev/install.sh | bash -s -- -y 2>/dev/null || true
+    if timeout 60 bash -c 'curl -sS https://starship.dev/install.sh | bash -s -- -y' 2>/dev/null; then
+        echo "  ✓ Starship installed (via install.sh)"
+    else
+        echo "  Starship install.sh failed, trying direct download..."
+        ARCH=$(uname -m)
+        if [ "$ARCH" = "arm64" ]; then ARCH="aarch64"; fi
+        curl -fsSL "https://github.com/starship/starship/releases/latest/download/starship-${ARCH}-apple-darwin.tar.gz" 2>/dev/null | tar -xzf - -C /usr/local/bin starship 2>/dev/null && chmod +x /usr/local/bin/starship 2>/dev/null
+        if command -v starship >/dev/null 2>&1; then
+            echo "  ✓ Starship installed (via direct download)"
+        else
+            echo "  ✗ FAILED: Starship install" >&2
+            FAILED=$((FAILED + 1))
+        fi
+    fi
 fi
 
 # ── Neovim (nightly) ───────────────────────────────────────────────────────
 install_neovim_macos() {
-    if command -v nvim >/dev/null 2>&1 && nvim --headless -c 'quit' 2>/dev/null; then return 0; fi
+    if [ -x "{{ .chezmoi.homeDir }}/.local/bin/nvim" ] && "{{ .chezmoi.homeDir }}/.local/bin/nvim" --headless -c 'quit' 2>/dev/null; then return 0; fi
     echo "Installing Neovim (nightly)..."
     local arch; arch=$(uname -m)
     local nvim_arch; [ "$arch" = "arm64" ] && nvim_arch="arm64" || nvim_arch="x86_64"
@@ -120,11 +200,23 @@ install_neovim_macos() {
     fi
 }
 install_neovim_macos
+NVIM_BIN="{{ .chezmoi.homeDir }}/.local/bin/nvim"
+if [ -x "$NVIM_BIN" ] && "$NVIM_BIN" --headless -c 'quit' 2>/dev/null; then
+    echo "  ✓ Neovim installed"
+else
+    echo "  ✗ FAILED: Neovim install" >&2
+    FAILED=$((FAILED + 1))
+fi
 
 # ── TPM (Tmux Plugin Manager) ──────────────────────────────────────────────
 if [ ! -d "{{ .chezmoi.homeDir }}/.tmux/plugins/tpm" ]; then
     echo "Installing TPM..."
-    git clone -q https://github.com/tmux-plugins/tpm "{{ .chezmoi.homeDir }}/.tmux/plugins/tpm" || true
+    if git clone -q https://github.com/tmux-plugins/tpm "{{ .chezmoi.homeDir }}/.tmux/plugins/tpm"; then
+        echo "  ✓ TPM installed"
+    else
+        echo "  ✗ FAILED: TPM install" >&2
+        FAILED=$((FAILED + 1))
+    fi
 fi
 
 # ── Age key ─────────────────────────────────────────────────────────────────
@@ -138,11 +230,7 @@ fi
 if [ -f "$CHEZMOI_TOML" ] && [ -f "$KEY_FILE" ] && grep -q 'REPLACE_WITH_YOUR_AGE_PUBLIC_KEY' "$CHEZMOI_TOML" 2>/dev/null; then
     PUBKEY=$(grep 'public key:' "$KEY_FILE" 2>/dev/null | sed 's/.*public key: *//')
     if [ -n "$PUBKEY" ]; then
-        if [ "$(uname -s)" = "Darwin" ]; then
-            sed -i "" "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML"
-        else
-            sed -i "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML"
-        fi
+        sed -i "" "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML"
     fi
 fi
 
@@ -157,6 +245,16 @@ if [ ! -f "$COMP_DIR/_chezmoi" ]; then
     mkdir -p "$COMP_DIR" || true
     chezmoi completion zsh > "$COMP_DIR/_chezmoi" 2>/dev/null || true
 fi
+
+echo "============================================"
+echo "  Package Installation Summary"
+echo "============================================"
+if [ $FAILED -eq 0 ]; then
+    echo "  ✓ All packages installed successfully."
+else
+    echo "  ⚠ $FAILED package(s) failed to install. Check output above for details."
+fi
+echo ""
 
 echo "=== Setup Complete ==="
 
