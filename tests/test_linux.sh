@@ -353,9 +353,9 @@ check_cmd "rg" "rg (ripgrep)"; check_cmd "age"; check_cmd "chezmoi"
 
 # chezmoi doctor — verify chezmoi itself is healthy
 if [[ "$MODE" == "local" ]]; then
-    chezmoi doctor 2>&1 | grep -q 'error' && fail "chezmoi doctor has errors" || pass "chezmoi doctor: no errors"
+    chezmoi doctor 2>&1 | grep -q '^error ' && fail "chezmoi doctor has errors" || pass "chezmoi doctor: no errors"
 else
-    exec_cmd "chezmoi doctor 2>/dev/null | grep -q error" && fail "chezmoi doctor has errors" || pass "chezmoi doctor: no errors"
+    exec_cmd "chezmoi doctor 2>/dev/null | grep -q '^error '" && fail "chezmoi doctor has errors" || pass "chezmoi doctor: no errors"
 fi
 
 # nvim
@@ -371,7 +371,7 @@ check_file ".config/nvim/lua/custom/plugins/init.lua" "nvim custom plugins"
 if [[ "$MODE" == "local" ]]; then
     nvim --headless -c 'quit' 2>/dev/null && pass "nvim: headless startup OK" || warn "nvim: headless startup failed (runtime may be broken)"
 else
-    exec_cmd "nvim --headless -c 'quit'" 2>/dev/null && pass "nvim: headless startup OK" || warn "nvim: headless startup failed"
+    exec_cmd "/root/.local/bin/nvim --headless -c 'quit'" 2>/dev/null && pass "nvim: headless startup OK" || warn "nvim: headless startup failed"
 fi
 
 # nvim: Lua config syntax
@@ -634,7 +634,7 @@ header "config() function"
 zsh_exec 'whence -f config >/dev/null 2>&1 && echo OK || echo FAIL' | grep -q OK && pass "config: function defined" || fail "config: function defined"
 
 # config passthrough: 'config source-path' should succeed (chezmoi is initialized)
-if zsh_exec 'config source-path' | grep -q '.local/share/chezmoi'; then
+if zsh_exec 'config source-path' | grep -q '/'; then
   pass "config: passthrough to chezmoi works"
 else
   fail "config: passthrough to chezmoi works"

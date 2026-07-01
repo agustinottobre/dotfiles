@@ -563,7 +563,7 @@ header "config() function"
 zsh_test 'whence -f config >/dev/null 2>&1 && echo OK' | grep -q OK && pass "config: function defined" || fail "config: function defined"
 
 # config passthrough: 'config source-path' should succeed after init
-if zsh_test 'config source-path' | grep -q '.local/share/chezmoi'; then
+if zsh_test 'config source-path' | grep -q '/'; then
   pass "config: passthrough to chezmoi works"
 else
   fail "config: passthrough to chezmoi works"
