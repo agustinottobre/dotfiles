@@ -1,18 +1,15 @@
 # =============================================================================
-# SSH Config — ENCRYPTED
+# SSH Config — chezmoi-managed template
 # =============================================================================
-# PRIVATE FILE — managed by chezmoi (permissions 0600).
+# PRIVATE FILE — deployed as ~/.ssh/config with 0600 permissions.
 #
-# ⚠️  KEY ROTATION: When you rotate your age key:
-#    1. Edit this file: chezmoi edit ~/.ssh/config
-#    2. Make your changes and save (chezmoi re-encrypts automatically)
-#    3. Commit the updated .age file
+# Editing:
+#   chezmoi edit ~/.ssh/config    → opens this template in $EDITOR
+#   config diff                    → shows drift between repo and deployed
+#   config apply                   → deploys repo version to ~/.ssh/config
 #
-# ⚠️  ADDING A NEW HOST:
-#    1. Edit: chezmoi edit ~/.ssh/config
-#    2. Add the new Host block
-#    3. Save — chezmoi re-encrypts automatically
-#    4. Commit the updated .age file
+# This file is a TEMPLATE (not encrypted). No secrets here — just host
+# entries and SSH options. The SSH keys alongside it are encrypted (.age).
 # =============================================================================
 {{- if eq .chezmoi.os "darwin" }}
 Include {{ .chezmoi.homeDir }}/.colima/ssh_config
