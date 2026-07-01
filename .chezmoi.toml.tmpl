@@ -1,7 +1,3 @@
-{{- $osid := .chezmoi.os -}}
-{{- if hasKey .chezmoi.osRelease "id" -}}
-{{-   $osid = printf "%s-%s" .chezmoi.os .chezmoi.osRelease.id -}}
-{{- end -}}
 sourceDir = "{{ .chezmoi.sourceDir }}"
 encryption = "age"
 [age]
@@ -17,6 +13,3 @@ encryption = "age"
     # The output will show your public key (age1...). Copy it below.
     # ============================================================
     recipient = "REPLACE_WITH_YOUR_AGE_PUBLIC_KEY"
-
-[data]
-    osid = {{ $osid | quote }}

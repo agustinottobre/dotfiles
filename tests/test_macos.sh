@@ -15,6 +15,8 @@
 
 set -euo pipefail
 
+source "$(dirname "$0")/_helpers.sh"
+
 # ── Config ──────────────────────────────────────────────────────────────────
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 KEEP_HOME=false
@@ -32,35 +34,6 @@ if [[ -z "$TEST_HOME" ]]; then
     TEST_HOME="$(mktemp -d /tmp/dotfiles-test-XXXXX)"
 fi
 
-PASS=0
-FAIL=0
-WARN=0
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-pass()   { echo -e "  ${GREEN}✓${NC} $1"; PASS=$((PASS + 1)); }
-fail()   { echo -e "  ${RED}✗${NC} $1 — ${2:-}"; FAIL=$((FAIL + 1)); }
-warn()   { echo -e "  ${YELLOW}⚠${NC} $1 — ${2:-}"; WARN=$((WARN + 1)); }
-header() { echo ""; echo -e "${CYAN}── $1 ──${NC}"; }
-
-# macOS doesn't ship GNU timeout. Define a fallback if missing.
-if ! command -v timeout >/dev/null 2>&1; then
-    timeout() {
-        local t="$1"; shift
-        "$@" &
-        local pid=$!
-        ( sleep "$t"; kill $pid 2>/dev/null ) &
-        wait $pid 2>/dev/null
-        local ret=$?
-        kill $! 2>/dev/null
-        return "${ret:-143}"
-    }
-fi
-
 # Run zsh in isolated test home
 zsh_test() {
     HOME="$TEST_HOME" ZDOTDIR="$TEST_HOME" zsh -l -i -c "$1" 2>&1 \
@@ -72,56 +45,6 @@ zsh_test() {
 # Run bash in isolated test home
 bash_test() {
     HOME="$TEST_HOME" bash -i -c "$1" 2>&1 || true
-}
-
-check_file() {
-    local path="$1" label="${2:-$1}"
-    [[ -f "$TEST_HOME/$path" ]] && pass "$label" || fail "$label" "missing"
-}
-
-check_dir() {
-    local path="$1" label="${2:-$1}"
-    [[ -d "$TEST_HOME/$path" ]] && pass "$label" || fail "$label" "missing"
-}
-
-check_cmd() {
-    local cmd="$1" label="${2:-$1}"
-    which "$cmd" >/dev/null 2>&1 && pass "$label" || fail "$label" "not in PATH"
-}
-
-check_grep() {
-    local file="$1" pattern="$2" label="$3" invert="${4:-false}"
-    if [[ "$invert" == "true" ]]; then
-        ! grep -q "$pattern" "$TEST_HOME/$file" 2>/dev/null \
-            && pass "$label" || fail "$label" "found unwanted in $file"
-    else
-        grep -q "$pattern" "$TEST_HOME/$file" 2>/dev/null \
-            && pass "$label" || fail "$label" "not found in $file"
-    fi
-}
-
-check_zsh_bindkey() {
-    local key="$1" widget="$2" label="${3:-}"
-    zsh_test "bindkey '$key' 2>/dev/null" 2>/dev/null | grep -qF "$widget" \
-        && pass "${label:-bindkey $key → $widget}" || fail "${label:-bindkey $key → $widget}" "not bound"
-}
-
-check_zsh_widget() {
-    local widget="$1" label="${2:-widget $widget}"
-    zsh_test "zle -l | grep -qF '$widget'" 2>/dev/null \
-        && pass "$label" || fail "$label" "widget not defined"
-}
-
-check_zsh_func() {
-    local func="$1" label="${2:-$func}"
-    zsh_test "whence -f $func >/dev/null 2>&1" >/dev/null 2>&1 \
-        && pass "$label" || fail "$label" "not defined"
-}
-
-check_zsh_var() {
-    local expr="$1" label="$2" detail="${3:-}"
-    zsh_test "[[ $expr ]]" >/dev/null 2>&1 \
-        && pass "$label" || fail "$label" "$detail"
 }
 
 # ── Cleanup ─────────────────────────────────────────────────────────────────

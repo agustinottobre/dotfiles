@@ -15,79 +15,16 @@
 
 set -euo pipefail
 
+source "$(dirname "$0")/_helpers.sh"
+
 # ── Setup ───────────────────────────────────────────────────────────────────
 TARGET_HOME="$(mktemp -d /tmp/dotfiles-test-local-XXXXX)"
+TEST_HOME="$TARGET_HOME"
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-PASS=0; FAIL=0; WARN=0
-
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'; NC='\033[0m'
-pass() { echo -e "  ${GREEN}✓${NC} $1"; PASS=$((PASS + 1)); }
-fail() { echo -e "  ${RED}✗${NC} $1 — ${2:-}"; FAIL=$((FAIL + 1)); }
-warn() { echo -e "  ${YELLOW}⚠${NC} $1 — ${2:-}"; WARN=$((WARN + 1)); }
-header() { echo ""; echo -e "${CYAN}── $1 ──${NC}"; }
-
-# macOS/Linux: define timeout fallback if missing.
-if ! command -v timeout >/dev/null 2>&1; then
-    timeout() {
-        local t="$1"; shift
-        "$@" &
-        local pid=$!
-        ( sleep "$t"; kill $pid 2>/dev/null ) &
-        wait $pid 2>/dev/null
-        local ret=$?
-        kill $! 2>/dev/null
-        return "${ret:-143}"
-    }
-fi
 
 # ── Exec helpers ─────────────────────────────────────────────────────────────
 zsh_exec()  { HOME="$TARGET_HOME" ZDOTDIR="$TARGET_HOME" zsh -l -i -c "$1" 2>&1 | grep -v "can't change option: zle" | grep -v "Detected a new version" || true; }
 bash_exec() { HOME="$TARGET_HOME" bash -l -i -c "$1" 2>&1 || true; }
-file_test() { [[ -f "$TARGET_HOME/$1" ]]; }
-dir_test()  { [[ -d "$TARGET_HOME/$1" ]]; }
-grep_file() { grep -q "$2" "$TARGET_HOME/$1" 2>/dev/null; }
-
-# ── Check helpers ───────────────────────────────────────────────────────────
-check_file() { file_test "$1" && pass "${2:-$1}" || fail "${2:-$1}" "missing: $1"; }
-check_dir()  { dir_test "$1"  && pass "${2:-$1}" || fail "${2:-$1}" "missing: $1"; }
-
-check_cmd() {
-    local cmd="$1" label="${2:-$1}"
-    which "$cmd" >/dev/null 2>&1 && pass "$label" || fail "$label" "not in PATH"
-}
-
-check_var() {
-    zsh_exec "[[ $1 ]]" >/dev/null 2>&1 && pass "$2" || fail "$2" "${3:-}"
-}
-
-check_grep() {
-    local file="$1" pattern="$2" label="$3" invert="${4:-false}"
-    if [[ "$invert" == "true" ]]; then
-        ! grep_file "$file" "$pattern" && pass "$label" || fail "$label" "found unwanted in $file"
-    else
-        grep_file "$file" "$pattern" && pass "$label" || fail "$label" "not found in $file"
-    fi
-}
-
-check_zsh_func() {
-    zsh_exec "whence -f $1 >/dev/null 2>&1" >/dev/null 2>&1 \
-        && pass "${2:-$1}" || fail "${2:-$1}" "function not defined"
-}
-
-check_zsh_alias() {
-    zsh_exec "alias $1 2>/dev/null | grep -qF '$2'" >/dev/null 2>&1 \
-        && pass "${3:-$1 → $2}" || fail "${3:-$1 → $2}" "alias missing"
-}
-
-check_zsh_bindkey() {
-    zsh_exec "bindkey '$1' 2>/dev/null | grep -qF '$2'" >/dev/null 2>&1 \
-        && pass "${3:-bindkey $1 → $2}" || fail "${3:-bindkey $1 → $2}" "not bound"
-}
-
-check_zsh_widget() {
-    zsh_exec "zle -l | grep -qF '$1'" >/dev/null 2>&1 \
-        && pass "${2:-widget $1}" || fail "${2:-widget $1}" "widget not defined"
-}
 
 # ── Cleanup ─────────────────────────────────────────────────────────────────
 cleanup() {
@@ -123,11 +60,7 @@ HOME="$TARGET_HOME" bash -c "
   chezmoi apply --source '$TARGET_HOME/dotfiles' --force --exclude=scripts 2>/dev/null
 " 2>&1 | tail -3
 # Verify dotfiles were deployed (check key files exist)
-if file_test ".zshrc" && file_test ".zshenv"; then
-    pass "dotfiles deployed"
-else
-    fail "dotfiles deployment failed"
-fi
+[[ -f "$TARGET_HOME/.zshrc" ]] && [[ -f "$TARGET_HOME/.zshenv" ]] && pass "dotfiles deployed" || fail "dotfiles deployment failed"
 
 # Generate age key for encryption tests (normally done by run_onchange)
 if [ ! -f "$TARGET_HOME/.config/chezmoi/key.txt" ]; then
@@ -150,7 +83,7 @@ header "Shell config files"
 check_file ".zshrc"; check_file ".zshenv"; check_file ".zprofile"
 check_file ".zimrc";  check_file ".bashrc"
 # shell_profile is deprecated — verify it is NOT deployed
-! file_test ".shell_profile" && pass "no .shell_profile (deprecated)" || fail ".shell_profile should be deprecated"
+! [[ -f "$TARGET_HOME/.shell_profile" ]] && pass "no .shell_profile (deprecated)" || fail ".shell_profile should be deprecated"
 
 header "Other dotfiles"
 check_file ".gitconfig"; check_file ".myclirc"; check_file ".taskrc"
@@ -181,8 +114,8 @@ check_grep ".ssh/config" "colima" "no colima Include (macOS only)" "true"
 check_grep ".ssh/config" "IdentitiesOnly yes" "IdentitiesOnly enabled"
 check_grep ".ssh/config" "AddKeysToAgent yes" "AddKeysToAgent enabled"
 # Verify SSH keyword capitalization is consistent (HostName not Hostname, IdentityFile not Identityfile)
-! grep_file ".ssh/config" "Hostname " && pass "SSH: no lowercase Hostname" || fail "SSH: lowercase Hostname found"
-! grep_file ".ssh/config" "Identityfile" && pass "SSH: no lowercase Identityfile" || fail "SSH: lowercase Identityfile found"
+check_grep ".ssh/config" "Hostname " "SSH: no lowercase Hostname" "true"
+check_grep ".ssh/config" "Identityfile" "SSH: no lowercase Identityfile" "true"
 
 header "Environment variables (zsh login)"
 check_var '$EDITOR == nvim' 'EDITOR=nvim'
@@ -275,7 +208,7 @@ check_dir ".zim" "~/.zim"
 check_dir ".zim/modules" "~/.zim/modules"
 for mod in environment git input termtitle utility zim-starship completion \
            zsh-completions zsh-syntax-highlighting zsh-history-substring-search zsh-autosuggestions; do
-    dir_test ".zim/modules/$mod" && pass "Zim: $mod" || fail "Zim: $mod missing"
+    check_dir ".zim/modules/$mod" "Zim: $mod"
 done
 
 # Generate fzf shell integration for the test environment
@@ -354,7 +287,7 @@ timeout 10 nvim --headless -c 'lua vim.fn.setreg("+", "TESTREG"); local ok = vim
     || fail "nvim: \"+ register broken"
 
 header "Tmux config"
-dir_test ".tmux/plugins/tpm" && pass "TPM plugin manager" || warn "TPM plugin manager (run 'git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm' to install)"
+[[ -d "$TARGET_HOME/.tmux/plugins/tpm" ]] && pass "TPM plugin manager" || warn "TPM plugin manager (run 'git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm' to install)"
 check_grep ".tmux.conf" 'set -g mode-keys vi' 'tmux: mode-keys vi'
 check_grep ".tmux.conf" 'setw -g mouse on' 'tmux: mouse enabled'
 check_grep ".tmux.conf" 'tmux-256color' 'tmux: 256color terminal'
@@ -398,19 +331,11 @@ check_grep ".config/starship.toml" 'show_always = true' "starship: username alwa
 header "Starship config integrity"
 # Corrupt format token regression: $sudovimstatdirectory was a single invalid module
 # instead of $sudo$directory. Verify it's absent from the format string.
-if file_test ".config/starship.toml"; then
-    grep_file ".config/starship.toml" '\$sudo' \
-        && pass "starship: format includes \$sudo" \
-        || fail "starship: format missing \$sudo"
-    ! grep_file ".config/starship.toml" "sudovimstatdirectory" \
-        && pass "starship: no corrupt format token (sudovimstatdirectory)" \
-        || fail "starship: format still has corrupt token sudovimstatdirectory"
-    ! grep_file ".config/starship.toml" "!TMUX" \
-        && pass "starship: hostname detect_env_vars fixed (no !TMUX negation)" \
-        || fail "starship: hostname detect_env_vars still has !TMUX"
-    ! grep_file ".config/starship.toml" "vim_status" \
-        && pass "starship: no stale vim_status reference in comment" \
-        || fail "starship: comment still references vim_status"
+if [[ -f "$TARGET_HOME/.config/starship.toml" ]]; then
+    check_grep ".config/starship.toml" '\$sudo' "starship: format includes \$sudo"
+    check_grep ".config/starship.toml" "sudovimstatdirectory" "starship: no corrupt format token (sudovimstatdirectory)" "true"
+    check_grep ".config/starship.toml" "!TMUX" "starship: hostname detect_env_vars fixed (no !TMUX negation)" "true"
+    check_grep ".config/starship.toml" "vim_status" "starship: no stale vim_status reference in comment" "true"
 else
     warn "starship.toml not found in test home"
 fi
@@ -507,10 +432,10 @@ fi
 zsh_exec 'config nonexistent_cmd 2>/dev/null; echo $?' | grep -q '1' && pass "config: errors on invalid chezmoi subcommand" || warn "config: errors on invalid chezmoi subcommand — may be chezmoi version difference"
 
 # FZF availability check in config() (no-args path)
-grep_file ".zshrc" 'command -v fzf' && pass "config: fzf availability check in .zshrc" || fail "config: fzf check missing"
+check_grep ".zshrc" 'command -v fzf' "config: fzf availability check in .zshrc"
 
 # Chezmoi source check in config() (passthrough path)
-grep_file ".zshrc" 'chezmoi source-path' && pass "config: source-path check before passthrough" || fail "config: source-path check missing"
+check_grep ".zshrc" 'chezmoi source-path' "config: source-path check before passthrough"
 
 # ── wiki() function ───────────────────────────────────────────────────────────
 header "wiki() function"
@@ -525,10 +450,10 @@ zsh_exec 'whence -f wiki-list-select >/dev/null 2>&1 && echo OK' | grep -q OK &&
 zsh_exec 'wiki 2>&1; echo EXIT:$?' | grep -q 'No wiki directory found' && pass "wiki: errors gracefully when no wiki dir exists" || fail "wiki: errors gracefully when no wiki dir exists"
 
 # Directory existence guard in wiki-list-select
-grep_file ".zshrc" '\[\[ -d "\$DIR" \]\]' && pass "wiki: directory existence guard present" || fail "wiki: directory guard missing"
+check_grep ".zshrc" '\[\[ -d "\$DIR" \]\]' "wiki: directory existence guard present"
 
 # Empty selection guard in wiki()
-grep_file ".zshrc" '\[\[ -z "\$wiki_selected" \]\]' && pass "wiki: empty selection guard present" || fail "wiki: empty selection guard missing"
+check_grep ".zshrc" '\[\[ -z "\$wiki_selected" \]\]' "wiki: empty selection guard present"
 
 # ── .chezmoi.toml.tmpl validation ─────────────────────────────────────────────
 header ".chezmoi.toml.tmpl"
@@ -576,7 +501,7 @@ grep -q 'Package Installation Summary' "$REPO_DIR/run_onchange_install-packages.
 header "FZF bindkey guards"
 
 # zle -l guard exists around explicit fzf bindings
-grep_file ".zshrc" 'zle -la fzf-file-widget' && pass "fzf: bindkey guarded by zle -la check" || fail "fzf: missing zle -la guard on bindkeys"
+check_grep ".zshrc" 'zle -la fzf-file-widget' "fzf: bindkey guarded by zle -la check"
 
 # bindkey calls are inside the guard (should appear after zle -l)
 # Count that bindkey appears AFTER the zle -l line in the file
@@ -603,7 +528,7 @@ grep -q '\.local/bin' "$bootstrap" && pass "bootstrap: ~/.local/bin fallback pre
 grep -q '\-w /usr/local/bin' "$bootstrap" && pass "bootstrap: /usr/local/bin writability check present" || fail "bootstrap: writability check missing"
 
 # chezmoi source-path check in shell config
-grep_file ".zshrc" 'chezmoi source-path' && pass "zshrc: source-path check in config()" || fail "zshrc: source-path check missing"
+check_grep ".zshrc" 'chezmoi source-path' "zshrc: source-path check in config()"
 
 # ── config add --encrypt workflow ─────────────────────────────────────────────
 header "config add --encrypt workflow (fake key roundtrip)"

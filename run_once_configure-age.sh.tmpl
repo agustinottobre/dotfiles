@@ -1,0 +1,36 @@
+#!/bin/bash
+# =============================================================================
+# Age encryption key — generates key + updates chezmoi config (runs once)
+# =============================================================================
+
+KEY_FILE="{{ .chezmoi.homeDir }}/.config/chezmoi/key.txt"
+CHEZMOI_TOML="{{ .chezmoi.homeDir }}/.config/chezmoi/chezmoi.toml"
+
+# ── Generate age key if missing ──
+if [ ! -f "$KEY_FILE" ]; then
+    echo "=== Generating age encryption key ==="
+    mkdir -p "$(dirname "$KEY_FILE")"
+    if chezmoi age-keygen --output "$KEY_FILE" 2>/dev/null; then
+        echo "  ✓ Age key generated: $KEY_FILE"
+    else
+        echo "  ✗ FAILED: age key generation" >&2
+        exit 1
+    fi
+fi
+
+# ── Update chezmoi.toml with recipient public key ──
+if [ -f "$CHEZMOI_TOML" ] && [ -f "$KEY_FILE" ] && grep -q 'REPLACE_WITH_YOUR_AGE_PUBLIC_KEY' "$CHEZMOI_TOML" 2>/dev/null; then
+    PUBKEY=$(chezmoi age-keygen -y "$KEY_FILE" 2>/dev/null)
+    if [ -n "$PUBKEY" ]; then
+        echo "Updating chezmoi.toml with age recipient..."
+        if [ "$(uname -s)" = "Darwin" ]; then
+            sed -i "" "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML"
+        else
+            sed -i "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML"
+        fi
+        echo "  ✓ Recipient configured in chezmoi.toml"
+    else
+        echo "  ✗ FAILED: could not extract public key from $KEY_FILE" >&2
+        exit 1
+    fi
+fi
