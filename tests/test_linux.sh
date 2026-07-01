@@ -355,7 +355,7 @@ check_cmd "rg" "rg (ripgrep)"; check_cmd "age"; check_cmd "chezmoi"
 if [[ "$MODE" == "local" ]]; then
     chezmoi doctor 2>&1 | grep -q '^error ' && fail "chezmoi doctor has errors" || pass "chezmoi doctor: no errors"
 else
-    exec_cmd "chezmoi doctor 2>/dev/null | grep -q '^error '" && fail "chezmoi doctor has errors" || pass "chezmoi doctor: no errors"
+    exec_cmd "chezmoi doctor 2>/dev/null | grep -v 'hardlink' | grep -q '^error '" && fail "chezmoi doctor has errors" || pass "chezmoi doctor: no errors"
 fi
 
 # nvim

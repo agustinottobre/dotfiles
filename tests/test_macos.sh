@@ -167,6 +167,10 @@ chezmoi init --source "$REPO_DIR" --destination "$TEST_HOME" --config-path "$CHE
     && pass "chezmoi init OK" || { fail "chezmoi init failed"; exit 1; }
 echo "persistentState = \"$CHEZMOI_PERSISTENT_STATE\"" >> "$CHEZMOI_STATE/chezmoi.toml"
 
+# Copy config to standard location so config() wrapper + encryption tests find it
+mkdir -p "$TEST_HOME/.config/chezmoi"
+cp "$CHEZMOI_STATE/chezmoi.toml" "$TEST_HOME/.config/chezmoi/chezmoi.toml"
+
 echo "Applying dotfiles..."
 chezmoi --config "$CHEZMOI_STATE/chezmoi.toml" apply --source "$REPO_DIR" --destination "$TEST_HOME" --force 2>&1 | grep -v "^$" | tail -3
 # Apply may have non-zero exit for non-critical issues, check files exist instead
@@ -443,7 +447,7 @@ tmux -f "$TEST_HOME/.tmux.conf" new-session -d -s dottest 2>/dev/null \
 
 # ── Chezmoi State ───────────────────────────────────────────────────────────
 header "Chezmoi files"
-check_file ".config/chezmoi/chezmoi.toml" "chezmoi config"
+check_file ".test-chezmoi-state/chezmoi.toml" "chezmoi config"
 
 # ── Zsh Startup ─────────────────────────────────────────────────────────────
 header "Zsh startup sanity"
