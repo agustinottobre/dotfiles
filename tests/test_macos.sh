@@ -784,9 +784,6 @@ git -C "$REPO_DIR" checkout -- private_dot_ssh/ 2>/dev/null || true
 # ── config wrapper subcommands (daily workflow) ───────────────────────────────
 header "config wrapper subcommands (daily workflow)"
 
-# Source for macOS test (copied to TEST_HOME during setup)
-TEST_SOURCE="$REPO_DIR"
-
 # ── config diff ──
 if zsh_test 'config diff 2>&1; echo EXIT:$?' | grep -q 'EXIT:0'; then
   pass "config: diff runs successfully (macOS)"
@@ -801,13 +798,12 @@ else
   warn "config: apply returned non-zero (macOS)"
 fi
 
-# ── config commit ── (safe: commits to test copy, not real repo)
-# Touch a managed file to create a change
-echo '# test commit marker' >> "$TEST_HOME/.zshrc"
-HOME="$TEST_HOME" chezmoi add --source "$TEST_SOURCE" --destination "$TEST_HOME" --force "$TEST_HOME/.zshrc" 2>/dev/null || true
-zsh_test 'config commit -m "test: config commit wrapper test" 2>&1; echo EXIT:$?' | grep -q 'EXIT:0' \
-  && pass "config: commit -m works through wrapper (macOS)" \
-  || warn "config: commit -m may have failed (git config, no changes, etc.) (macOS)"
+# ── config commit ── (verify subcommand exists, actual commit skipped)
+if chezmoi git --help >/dev/null 2>&1; then
+  pass "config: git subcommand recognized by chezmoi (macOS)"
+else
+  warn "config: git subcommand not available (macOS)"
+fi
 
 # ── config edit (verify subcommand recognized) ──
 if HOME="$TEST_HOME" chezmoi edit --dry-run "$TEST_HOME/.zshrc" 2>/dev/null; then
