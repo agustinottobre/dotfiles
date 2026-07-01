@@ -635,10 +635,10 @@ grep -q 'FAILED=' "$REPO_DIR/run_onchange_install-packages.sh.tmpl" && pass "run
 header "FZF bindkey guards"
 
 # zle -l guard exists around explicit fzf bindings
-grep -q 'zle -l fzf-file-widget' "$TEST_HOME/.zshrc" && pass "fzf: bindkey guarded by zle -l check" || fail "fzf: missing zle -l guard on bindkeys"
+grep -q 'zle -la fzf-file-widget' "$TEST_HOME/.zshrc" && pass "fzf: bindkey guarded by zle -la check" || fail "fzf: missing zle -la guard on bindkeys"
 
 # Verify bindkeys appear after the guard
-zle_lineno=$(grep -n 'zle -l fzf-file-widget' "$TEST_HOME/.zshrc" | cut -d: -f1 | head -1)
+zle_lineno=$(grep -n 'zle -la fzf-file-widget' "$TEST_HOME/.zshrc" | cut -d: -f1 | head -1)
 bindkey_lineno=$(grep -n "bindkey.*fzf-file-widget" "$TEST_HOME/.zshrc" | cut -d: -f1 | head -1)
 if [[ "$bindkey_lineno" -gt "$zle_lineno" ]]; then
   pass "fzf: bindkeys are inside the zle guard (macOS)"

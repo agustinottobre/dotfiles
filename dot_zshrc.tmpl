@@ -48,8 +48,8 @@ elif [[ -f /opt/homebrew/share/fzf/key-bindings.zsh ]]; then
 fi
 
 # Explicitly bind fzf keys (ensures they work if overridden elsewhere)
-# Only bind if the widgets actually exist (fzf may not be installed)
-if zle -l fzf-file-widget >/dev/null 2>&1; then
+# zle -la checks all widgets including autoloaded (macOS fpath autoload)
+if zle -la fzf-file-widget >/dev/null 2>&1; then
   bindkey '^X^F' fzf-file-widget
   bindkey '^R' fzf-history-widget
   bindkey '^T' fzf-file-widget

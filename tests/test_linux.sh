@@ -713,11 +713,11 @@ grep -q 'Package Installation Summary' "$REPO_DIR/run_onchange_install-packages.
 header "FZF bindkey guards"
 
 # zle -l guard exists around explicit fzf bindings
-grep_file ".zshrc" 'zle -l fzf-file-widget' && pass "fzf: bindkey guarded by zle -l check" || fail "fzf: missing zle -l guard on bindkeys"
+grep_file ".zshrc" 'zle -la fzf-file-widget' && pass "fzf: bindkey guarded by zle -la check" || fail "fzf: missing zle -la guard on bindkeys"
 
 # bindkey calls are inside the guard (should appear after zle -l)
 # Count that bindkey appears AFTER the zle -l line in the file
-zle_lineno=$(grep -n 'zle -l fzf-file-widget' "$TARGET_HOME/.zshrc" | cut -d: -f1 | head -1)
+zle_lineno=$(grep -n 'zle -la fzf-file-widget' "$TARGET_HOME/.zshrc" | cut -d: -f1 | head -1)
 bindkey_lineno=$(grep -n "bindkey.*fzf-file-widget" "$TARGET_HOME/.zshrc" | cut -d: -f1 | head -1)
 if [[ "$bindkey_lineno" -gt "$zle_lineno" ]]; then
   pass "fzf: bindkeys are inside the zle guard"
