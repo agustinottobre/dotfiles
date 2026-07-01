@@ -99,6 +99,12 @@ CHEZMOI_STATE="$TEST_HOME/.test-chezmoi-state"
 mkdir -p "$CHEZMOI_STATE"
 CHEZMOI_PERSISTENT_STATE="$CHEZMOI_STATE/chezmoi.boltdb"
 
+# Extract host age public key for config setup below.
+AGE_PUBKEY=""
+if [ -f "$HOME/.config/chezmoi/key.txt" ]; then
+    AGE_PUBKEY=$(chezmoi age-keygen -y "$HOME/.config/chezmoi/key.txt" 2>/dev/null || true)
+fi
+
 echo "Initializing chezmoi..."
 chezmoi init --source "$REPO_DIR" --destination "$TEST_HOME" --config-path "$CHEZMOI_STATE/chezmoi.toml" --force 2>&1 | tail -1 \
     && pass "chezmoi init OK" || { fail "chezmoi init failed"; exit 1; }
@@ -116,17 +122,13 @@ git -C "$REPO_DIR" checkout -- private_dot_ssh/ 2>/dev/null || true
 echo "Applying dotfiles..."
 chezmoi --config "$CHEZMOI_STATE/chezmoi.toml" apply --source "$REPO_DIR" --destination "$TEST_HOME" --force 2>&1 | grep -v "^$" | tail -5 || true
 
-# Fix test config: replace placeholder recipient with host age key
-# (run_onchange modifies HOST config, not test config)
-if [ -f "$HOME/.config/chezmoi/key.txt" ]; then
-    AGE_PUBKEY=$(grep 'public key:' "$HOME/.config/chezmoi/key.txt" 2>/dev/null | sed 's/.*public key: *//')
-    if [ -n "$AGE_PUBKEY" ]; then
-        mkdir -p "$TEST_HOME/.config/chezmoi"
-        cp "$HOME/.config/chezmoi/key.txt" "$TEST_HOME/.config/chezmoi/key.txt"
-        sed -i '' "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$AGE_PUBKEY/" "$TEST_HOME/.config/chezmoi/chezmoi.toml"
-        # Fix identity path to point to test home, not real home
-        sed -i '' "s|identity = \".*\"|identity = \"$TEST_HOME/.config/chezmoi/key.txt\"|" "$TEST_HOME/.config/chezmoi/chezmoi.toml"
-    fi
+# Copy host age identity so the test home can decrypt .age files
+if [ -f "$HOME/.config/chezmoi/key.txt" ] && [ -n "$AGE_PUBKEY" ]; then
+    cp "$HOME/.config/chezmoi/key.txt" "$TEST_HOME/.config/chezmoi/key.txt"
+    # Replace placeholder recipient with the host age public key
+    sed -i '' "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$AGE_PUBKEY/" "$TEST_HOME/.config/chezmoi/chezmoi.toml"
+    # Fix identity path to point to test home, not real home
+    sed -i '' "s|identity = \".*\"|identity = \"$TEST_HOME/.config/chezmoi/key.txt\"|" "$TEST_HOME/.config/chezmoi/chezmoi.toml"
 fi
 
 # Install TPM in test home (run_once script uses .chezmoi.homeDir which
@@ -470,7 +472,7 @@ if command -v age >/dev/null 2>&1; then
     if [[ ! -f "$AGE_KEY" ]]; then
         fail "age: no key found at $AGE_KEY"
     else
-        AGE_PUBKEY=$(grep 'public key:' "$AGE_KEY" 2>/dev/null | sed 's/.*public key: *//') || true
+        AGE_PUBKEY=$(chezmoi age-keygen -y "$AGE_KEY" 2>/dev/null) || true
         if [[ -n "$AGE_PUBKEY" ]]; then
             pass "age: key pair found"
         else

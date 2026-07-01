@@ -19,5 +19,5 @@ DOTFILES_STRATEGY.md
 # Template source files (already managed by chezmoi)
 {{ if ne .chezmoi.os "darwin" }}
 # Exclude macOS-only configs on non-macOS
-.config/skhd/skhdrc
+dot_config/skhd/skhdrc
 {{ end }}

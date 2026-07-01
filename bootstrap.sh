@@ -48,12 +48,24 @@ if ! command -v chezmoi >/dev/null 2>&1; then
     else
         mkdir -p "$HOME/.local/bin"
         curl -sSL https://get.chezmoi.io | sh -s -- -b "$HOME/.local/bin"
-        warn "Chezmoi installed to ~/.local/bin. Add ~/.local/bin to your PATH if not already present."
+        export PATH="$HOME/.local/bin:$PATH"
+        warn "Chezmoi installed to ~/.local/bin. Added to PATH for this session."
     fi
     info "Chezmoi installed."
 else
     info "Chezmoi already installed."
 fi
+
+# ── Age encryption key ─────────────────────────────────────────────────────
+# Generate before chezmoi runs so the recipient is valid from the start.
+KEY_FILE="$HOME/.config/chezmoi/key.txt"
+if [ ! -f "$KEY_FILE" ]; then
+    info "Generating age encryption key..."
+    mkdir -p "$(dirname "$KEY_FILE")"
+    chezmoi age-keygen --output "$KEY_FILE"
+    info "Age key generated: $KEY_FILE"
+fi
+PUBKEY=$(chezmoi age-keygen -y "$KEY_FILE" 2>/dev/null)
 
 # 2. Check for existing dotfiles repo
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -63,15 +75,26 @@ if [ ! -d "$REPO_DIR/.git" ]; then
 fi
 
 info "Dotfiles repo at: $REPO_DIR"
-info "Export DOTFILES_REPO=$REPO_DIR for chezmoi update commands"
 
-# 3. Initialize and apply
-info "Initializing chezmoi from $REPO_DIR..."
+# 3. Initialize chezmoi (generates config with placeholder recipient)
+info "Initializing chezmoi..."
 chezmoi init --source "$REPO_DIR" --force
+
+# Replace placeholder with the real age public key
+# Done outside of chezmoi scripts to avoid config mutation during apply.
+CHEZMOI_TOML="$HOME/.config/chezmoi/chezmoi.toml"
+if [ -f "$CHEZMOI_TOML" ] && grep -q 'REPLACE_WITH_YOUR_AGE_PUBLIC_KEY' "$CHEZMOI_TOML" 2>/dev/null; then
+    if [ "$(uname -s)" = "Darwin" ]; then
+        sed -i "" "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML"
+    else
+        sed -i "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML"
+    fi
+    info "Age recipient configured in chezmoi.toml"
+fi
 
 # 4. Apply dotfiles
 info "Applying dotfiles..."
-chezmoi apply --source "$REPO_DIR" --force --dry-run=false
+chezmoi apply --force
 
 if [ "$OS" != "darwin" ]; then
   if [ -x /usr/bin/zsh ] && [ "$SHELL" != "/usr/bin/zsh" ]; then
