@@ -182,12 +182,13 @@ _config_rm() {
 }
 
 # ── config lock / unlock ────────────────────────────────────────────────────
-# config lock      → removes deployed secrets (key stays protected)
-# config unlock    → passphrase → recover key → deploy secrets
+# config lock      → removes deployed secrets (SSH keys, encrypted configs)
+# config unlock    → passphrase (or manual key) → deploy secrets → shred key
 #
-# First time: place key.txt manually, then run 'config unlock' — you'll
-# set a passphrase to protect it locally. After that, just unlock/lock.
-# key.txt.age lives at ~/.config/chezmoi/ (local only, never in repo).
+# First time: place key.txt manually, run 'config unlock', optionally set
+# a passphrase. After that, just unlock/lock. With passphrase, key.txt.age
+# lives at ~/.config/chezmoi/ (local only, never in repo).
+# Without passphrase, you place key.txt manually on each unlock.
 
 _config_lock() {
     local src target srcpath removed
@@ -211,14 +212,17 @@ _config_unlock() {
         chezmoi age decrypt --passphrase --output ~/.config/chezmoi/key.txt "$local_age" || return 1
         chmod 600 ~/.config/chezmoi/key.txt
     elif [[ -f ~/.config/chezmoi/key.txt ]]; then
-        # First unlock: key placed manually, set a passphrase to protect it
+        # First unlock: key placed manually, optionally protect with passphrase
         config apply
         echo ""
-        echo "Choose a passphrase to protect your key locally:"
-        chezmoi age encrypt --passphrase --output "$local_age" ~/.config/chezmoi/key.txt \
-            && echo "  ✓ Key protected at $local_age"
+        echo "Choose a passphrase to protect your key locally (Enter to skip):"
+        if chezmoi age encrypt --passphrase --output "$local_age" ~/.config/chezmoi/key.txt 2>/dev/null; then
+            echo "  ✓ Key protected at $local_age"
+        else
+            echo "  ⚠ Passphrase skipped — you'll need to place the key on each unlock"
+        fi
         _config_rm ~/.config/chezmoi/key.txt
-        echo "config unlock: secrets deployed, key protected — use 'config lock' to remove secrets"
+        echo "config unlock: secrets deployed"
         return 0
     else
         echo "config unlock: no key found" >&2
