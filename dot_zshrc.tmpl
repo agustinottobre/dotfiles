@@ -173,7 +173,6 @@ function config(){
 }
 
 # ── Secure removal helper ───────────────────────────────────────────────────
-# Uses shred (coreutils) when available, falls back to rm.
 _config_rm() {
     if command -v shred >/dev/null 2>&1; then
         shred -u "$1" 2>/dev/null || rm -f "$1"
@@ -183,18 +182,17 @@ _config_rm() {
 }
 
 # ── config lock / unlock ────────────────────────────────────────────────────
-# Two seamless operations:
-#   config lock    → encrypt key with passphrase (local), shred plaintext, remove secrets
-#   config unlock  → passphrase → recover key → deploy secrets → shred plaintext
+# config lock      → removes deployed secrets (key stays protected)
+# config unlock    → passphrase → recover key → deploy secrets
 #
-# key.txt.age lives at ~/.config/chezmoi/ (LOCAL ONLY, never in repo).
-# The passphrase is a local convenience — not a transport mechanism.
+# First time: place key.txt manually, then run 'config unlock' — you'll
+# set a passphrase to protect it locally. After that, just unlock/lock.
+# key.txt.age lives at ~/.config/chezmoi/ (local only, never in repo).
 
 _config_lock() {
     local src target srcpath removed
     src=$(chezmoi source-path 2>/dev/null) || { echo "config lock: chezmoi not configured" >&2; return 1; }
     removed=0
-    # Remove deployed .age-backed files
     while IFS= read -r target; do
         [[ -n "$target" ]] || continue
         srcpath=$(chezmoi source-path "$HOME/$target" 2>/dev/null) || continue
@@ -202,31 +200,35 @@ _config_lock() {
             rm -f "$HOME/$target" && ((removed++))
         fi
     done < <(chezmoi managed 2>/dev/null)
-    # Protect the key with a passphrase before shredding plaintext
-    if [[ -f ~/.config/chezmoi/key.txt ]]; then
-        echo "Choose a passphrase to protect your local key:"
-        chezmoi age encrypt --passphrase --output ~/.config/chezmoi/key.txt.age ~/.config/chezmoi/key.txt \
-            && echo "  ✓ Key protected at ~/.config/chezmoi/key.txt.age"
-        _config_rm ~/.config/chezmoi/key.txt
-    fi
-    echo "config lock: removed ${removed} encrypted file(s), age identity secured"
+    echo "config lock: removed ${removed} encrypted file(s)"
 }
 
 _config_unlock() {
     local local_age=~/.config/chezmoi/key.txt.age
     if [[ -f "$local_age" ]]; then
+        # Subsequent unlocks: decrypt with existing passphrase
         echo "Enter passphrase to unlock:"
         chezmoi age decrypt --passphrase --output ~/.config/chezmoi/key.txt "$local_age" || return 1
         chmod 600 ~/.config/chezmoi/key.txt
-    elif [[ ! -f ~/.config/chezmoi/key.txt ]]; then
+    elif [[ -f ~/.config/chezmoi/key.txt ]]; then
+        # First unlock: key placed manually, set a passphrase to protect it
+        config apply
+        echo ""
+        echo "Choose a passphrase to protect your key locally:"
+        chezmoi age encrypt --passphrase --output "$local_age" ~/.config/chezmoi/key.txt \
+            && echo "  ✓ Key protected at $local_age"
+        _config_rm ~/.config/chezmoi/key.txt
+        echo "config unlock: secrets deployed, key protected — use 'config lock' to remove secrets"
+        return 0
+    else
         echo "config unlock: no key found" >&2
-        echo "  Place your age key at ~/.config/chezmoi/key.txt" >&2
-        echo "  Then run 'config lock' to protect it with a passphrase." >&2
+        echo "  First time? Place your age key at ~/.config/chezmoi/key.txt" >&2
+        echo "  Then run 'config unlock' to deploy secrets and set a passphrase." >&2
         return 1
     fi
     config apply
     _config_rm ~/.config/chezmoi/key.txt
-    echo "config unlock: encrypted files deployed, identity removed from disk"
+    echo "config unlock: secrets deployed from disk"
 }
 
 # Wiki
