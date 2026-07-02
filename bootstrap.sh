@@ -76,7 +76,7 @@ else
     info "Generating age encryption key..."
     mkdir -p "$(dirname "$KEY_FILE")"
     AGE_OUT=$(chezmoi age-keygen)
-    echo "$AGE_OUT" > "$KEY_FILE"
+    printf '%s\n' "$AGE_OUT" > "$KEY_FILE"
     chmod 600 "$KEY_FILE"
     PUBKEY=$(echo "$AGE_OUT" | sed -n 's/# public key: *//p')
     unset AGE_OUT
@@ -143,6 +143,20 @@ if [ -f "$AGE_ENC" ] && ! git -C "$REPO_DIR" diff --cached --quiet "$AGE_ENC" 2>
     echo "  # On other machines, bootstrap.sh will prompt for the passphrase."
 fi
 echo ""
+
+# ── Security reminder ──
+if [ -f "$KEY_FILE" ]; then
+    if [ -f "$AGE_ENC" ]; then
+        echo -e "${YELLOW}[SECURITY]${NC} Age key on disk at $KEY_FILE"
+        echo "  This machine can decrypt all your secrets."
+        echo "  If this is not your primary machine, lock it: config lock"
+    else
+        echo -e "${YELLOW}[SECURITY]${NC} Age key at $KEY_FILE — protect it"
+        echo "  Use a strong passphrase. This key decrypts everything."
+    fi
+    echo ""
+fi
+
 info "To update dotfiles later:"
 echo "  export DOTFILES_REPO=$REPO_DIR"
 echo "  chezmoi update --source=\$DOTFILES_REPO && chezmoi apply --source=\$DOTFILES_REPO"
