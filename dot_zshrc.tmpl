@@ -232,48 +232,56 @@ _config_unlock() {
 # ── config rotate-key ───────────────────────────────────────────────────────
 # Re-encrypts all .age files with a new key and updates chezmoi.toml.
 # Usage: config rotate-key ~/new-age-key.txt
-# Requires the old key on disk. If locked, run 'config unlock' first.
 _config_rotate() {
-    local new_key="$1"
+    local new_key_path="$1"
     local old_key=~/.config/chezmoi/key.txt
-    local old_protected=~/.config/chezmoi/key.txt.age
+    local protected=~/.config/chezmoi/key.txt.age
 
-    if [[ $# -ne 1 || ! -f "$new_key" ]]; then
-        echo "config rotate-key: path to new age key required" >&2
-        echo "  Usage: config rotate-key ~/new-age-key.txt" >&2
+    if [[ $# -ne 1 || ! -f "$new_key_path" ]]; then
+        echo "Usage: config rotate-key <new-key-file>" >&2
         return 1
     fi
 
-    # Recover old key if locked (passphrase-protected)
-    if [[ ! -f "$old_key" ]] && [[ -f "$old_protected" ]]; then
-        echo "Old key is locked — enter passphrase:"
-        chezmoi age decrypt --passphrase --output "$old_key" "$old_protected" || return 1
+    # ── 1. Get the old key ──
+    if [[ -f "$old_key" ]]; then
+        echo "Old key: $old_key"
+    elif [[ -f "$protected" ]]; then
+        echo "Old key protected — enter passphrase:"
+        chezmoi age decrypt --passphrase --output "$old_key" "$protected" || return 1
         chmod 600 "$old_key"
-    fi
-    if [[ ! -f "$old_key" ]]; then
-        echo "config rotate-key: current key not found" >&2
-        echo "  Place it at $old_key or run 'config unlock' first." >&2
+    else
+        echo "Old key not found at $old_key or $protected" >&2
         return 1
     fi
 
-    local src new_pubkey
-    src=$(chezmoi source-path 2>/dev/null) || { echo "config rotate-key: chezmoi not configured" >&2; return 1; }
-    new_pubkey=$(chezmoi age-keygen -y "$new_key" 2>/dev/null)
-    [[ -n "$new_pubkey" ]] || { echo "config rotate-key: could not extract pubkey from $new_key" >&2; return 1; }
+    # ── 2. Extract new public key ──
+    local new_pubkey
+    new_pubkey=$(chezmoi age-keygen -y "$new_key_path" 2>/dev/null)
+    if [[ -z "$new_pubkey" ]]; then
+        echo "Could not extract public key from $new_key_path" >&2
+        return 1
+    fi
+    echo "New key:  $new_key_path"
+    echo "New pub:  $new_pubkey"
+    echo ""
 
-    local rotated=0
+    # ── 3. Re-encrypt each .age file ──
+    local src rotated=0
+    src=$(chezmoi source-path 2>/dev/null) || { echo "chezmoi not configured" >&2; return 1; }
     while IFS= read -r -d '' agefile; do
-        [[ "$agefile" == */key.txt.age ]] && continue
+        local rel="${agefile#$src/}"
+        [[ "$rel" == "key.txt.age" ]] && continue
         local tmp=$(mktemp /tmp/chezmoi-rotate-XXXXXX)
         if age -d -i "$old_key" "$agefile" 2>/dev/null | age -r "$new_pubkey" -o "$tmp" 2>/dev/null; then
             mv "$tmp" "$agefile" && ((rotated++))
+            echo "  ✓ $rel"
         else
             rm -f "$tmp"
-            echo "  ⚠ Failed to re-encrypt: ${agefile#$src/}" >&2
+            echo "  ✗ $rel — skipped" >&2
         fi
     done < <(find "$src" -name '*.age' -type f -print0 2>/dev/null)
 
-    # Update chezmoi.toml recipient
+    # ── 4. Update chezmoi.toml recipient ──
     local toml=~/.config/chezmoi/chezmoi.toml
     if [[ -f "$toml" ]]; then
         if [[ "$(uname -s)" == "Darwin" ]]; then
@@ -281,11 +289,17 @@ _config_rotate() {
         else
             sed -i "s|recipient.*=.*\"age1[^\"]*\"|recipient = \"$new_pubkey\"|" "$toml"
         fi
+        echo ""
+        echo "  ✓ chezmoi.toml recipient updated"
     fi
 
-    echo "config rotate-key: re-encrypted ${rotated} file(s) with new key"
-    echo "  Keep your new key: $new_key"
-    echo "  Distribute it to other machines, then run 'config lock'."
+    # ── 5. Summary ──
+    echo ""
+    echo "── Rotation complete: ${rotated} file(s) re-encrypted ──"
+    echo "  Review:  config diff"
+    echo "  Commit:  config commit -m 'rotate: age master key' && config git -- push"
+    echo "  Old key: still on disk at $old_key (run 'config lock' to secure)"
+    echo "  New key: $new_key_path (distribute to other machines)"
 }
 
 # Wiki
