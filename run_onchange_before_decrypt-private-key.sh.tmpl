@@ -1,0 +1,16 @@
+#!/bin/sh
+# =============================================================================
+# Decrypt the age private key before applying dotfiles.
+# Runs on every 'chezmoi apply' when content changes. If the key is already
+# decrypted (~/.config/chezmoi/key.txt exists), this is a no-op.
+# Otherwise prompts for the passphrase once.
+# =============================================================================
+
+if [ ! -f "${HOME}/.config/chezmoi/key.txt" ]; then
+    echo "=== Age key not found — decrypting from repo ==="
+    mkdir -p "${HOME}/.config/chezmoi"
+    chezmoi age decrypt --passphrase --output "${HOME}/.config/chezmoi/key.txt" \
+        "{{ .chezmoi.sourceDir }}/key.txt.age"
+    chmod 600 "${HOME}/.config/chezmoi/key.txt"
+    echo "  ✓ Age key decrypted"
+fi

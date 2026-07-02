@@ -174,39 +174,38 @@ function config(){
 
 # ── config lock / unlock internals ──
 # Without the age identity file at ~/.config/chezmoi/key.txt, encrypted
-# .age files (SSH keys) are ignored via .chezmoiignore — ~/.ssh/ stays empty.
-# Place the key temporarily to decrypt, then remove it to re-lock.
+# .age files are ignored via .chezmoiignore — deployed targets stay empty.
+# 'config unlock' prompts for the passphrase to decrypt key.txt.age from the
+# repo, applies, then removes the key. No cleartext key stored anywhere.
 _config_unlock() {
-    local src keyfile
+    local src age_enc
     src=$(chezmoi source-path 2>/dev/null) || { echo "config unlock: chezmoi not configured" >&2; return 1; }
-    keyfile="${DOTFILES_AGE_KEY:-${HOME}/.config/chezmoi/key.txt.backup}"
-    if [[ ! -f "$keyfile" ]]; then
-        echo "config unlock: age key not found at $keyfile" >&2
-        echo "  Set DOTFILES_AGE_KEY=/path/to/age-key.txt or place key at ~/.config/chezmoi/key.txt.backup" >&2
+    age_enc="$src/key.txt.age"
+    if [[ ! -f "$age_enc" ]]; then
+        echo "config unlock: key.txt.age not found in repo. Run bootstrap.sh first." >&2
         return 1
     fi
-    cp "$keyfile" ~/.config/chezmoi/key.txt
+    echo "Enter passphrase to unlock encrypted files:"
+    chezmoi age decrypt --passphrase --output ~/.config/chezmoi/key.txt "$age_enc" || return 1
     chmod 600 ~/.config/chezmoi/key.txt
     config apply
-    if ls "$src"/private_dot_ssh/*.age >/dev/null 2>&1; then
-        echo "config unlock: SSH keys deployed, identity removed from disk"
-    fi
     rm -f ~/.config/chezmoi/key.txt
+    echo "config unlock: encrypted files deployed, identity removed from disk"
 }
 
 _config_lock() {
-    local src
+    local src target srcpath removed
     src=$(chezmoi source-path 2>/dev/null) || { echo "config lock: chezmoi not configured" >&2; return 1; }
-    local removed=0
-    for agefile in "$src"/private_dot_ssh/*.age; do
-        [[ -f "$agefile" ]] || continue
-        local plain="${HOME}/.ssh/$(basename "$agefile" .age)"
-        if [[ -f "$plain" ]]; then
-            rm -f "$plain" && ((removed++))
+    removed=0
+    while IFS= read -r target; do
+        [[ -n "$target" ]] || continue
+        srcpath=$(chezmoi source-path "$HOME/$target" 2>/dev/null) || continue
+        if [[ "$srcpath" == *.age ]]; then
+            rm -f "$HOME/$target" && ((removed++))
         fi
-    done
+    done < <(chezmoi managed 2>/dev/null)
     rm -f ~/.config/chezmoi/key.txt
-    echo "config lock: removed ${removed} SSH key(s), age identity deleted"
+    echo "config lock: removed ${removed} encrypted file(s), age identity deleted"
 }
 
 # Wiki

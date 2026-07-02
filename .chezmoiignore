@@ -8,6 +8,9 @@ DOTFILES_STRATEGY.md
 /bootstrap.sh
 /macos_on_incus_potential_solution.txt
 
+# Encrypted age key (not a dotfile — managed manually by bootstrap.sh)
+/key.txt.age
+
 # Tests and docs (not deployed to home)
 /tests/
 /DOCS/
@@ -25,8 +28,9 @@ dot_config/skhd/skhdrc
 # ── Encrypted files: ignore when age identity is absent ──
 # Without the identity file, chezmoi can't decrypt .age files. Ignoring them
 # lets config apply work normally for all unencrypted files. Place the key
-# at ~/.config/chezmoi/key.txt and run 'config apply' to decrypt on-demand.
+# at ~/.config/chezmoi/key.txt and run 'config apply' (or 'config unlock')
+# to decrypt on-demand.
 {{- $hasKey := stat (joinPath .chezmoi.homeDir ".config" "chezmoi" "key.txt") }}
 {{- if not $hasKey }}
-private_dot_ssh/*.age
+**/*.age
 {{- end }}

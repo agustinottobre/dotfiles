@@ -57,13 +57,33 @@ else
 fi
 
 # ── Age encryption key ─────────────────────────────────────────────────────
-# Generate before chezmoi runs so the recipient is valid from the start.
 KEY_FILE="$HOME/.config/chezmoi/key.txt"
-if [ ! -f "$KEY_FILE" ]; then
+AGE_ENC="$REPO_DIR/key.txt.age"
+
+if [ -f "$AGE_ENC" ]; then
+    # ── Not the first machine: decrypt the key with passphrase ──
+    info "Encrypted age key found in repo ($AGE_ENC)."
+    if [ ! -f "$KEY_FILE" ]; then
+        echo ""
+        echo -e "${YELLOW}Enter the passphrase to decrypt your age key:${NC}"
+        mkdir -p "$(dirname "$KEY_FILE")"
+        chezmoi age decrypt --passphrase --output "$KEY_FILE" "$AGE_ENC"
+        chmod 600 "$KEY_FILE"
+        info "Age key decrypted to $KEY_FILE"
+    fi
+else
+    # ── First machine: generate key, encrypt with passphrase ──
     info "Generating age encryption key..."
     mkdir -p "$(dirname "$KEY_FILE")"
     chezmoi age-keygen --output "$KEY_FILE"
+    chmod 600 "$KEY_FILE"
     info "Age key generated: $KEY_FILE"
+    echo ""
+    echo -e "${YELLOW}Choose a passphrase to protect your age key.${NC}"
+    echo -e "${YELLOW}You will need this passphrase on every new machine.${NC}"
+    chezmoi age encrypt --passphrase --output "$AGE_ENC" "$KEY_FILE"
+    git -C "$REPO_DIR" add "$AGE_ENC" 2>/dev/null || true
+    info "Encrypted key saved to $AGE_ENC — commit this to the repo."
 fi
 PUBKEY=$(chezmoi age-keygen -y "$KEY_FILE" 2>/dev/null)
 
@@ -113,12 +133,11 @@ echo "  1. Restart your shell: exec zsh"
 echo "  2. Or source: source ~/.zshrc"
 echo "  3. For tmux: prefix + I to install plugins"
 echo ""
-echo -e "${YELLOW}[IMPORTANT]${NC} Back up your age key for other machines:"
-echo "  cp $KEY_FILE /secure/location/dotfiles-age-key.txt"
-echo "  # Or store in password manager:"
-echo "  # pass insert chezmoi/age-key < $KEY_FILE"
-echo "  # On other machines, place it at ~/.config/chezmoi/key.txt.backup"
-echo "  # Then run: config unlock"
+if [ -f "$AGE_ENC" ] && ! git -C "$REPO_DIR" diff --cached --quiet "$AGE_ENC" 2>/dev/null; then
+    echo -e "${YELLOW}[IMPORTANT]${NC} Commit the encrypted age key to the repo:"
+    echo "  cd $REPO_DIR && git commit -m 'add encrypted age key' && git push"
+    echo "  # On other machines, bootstrap.sh will prompt for the passphrase."
+fi
 echo ""
 info "To update dotfiles later:"
 echo "  export DOTFILES_REPO=$REPO_DIR"

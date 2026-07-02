@@ -120,7 +120,7 @@ rm -f "$REPO_DIR"/private_dot_ssh/test_wrapper_key.age "$REPO_DIR"/private_dot_s
 git -C "$REPO_DIR" checkout -- private_dot_ssh/ 2>/dev/null || true
 
 echo "Applying dotfiles..."
-chezmoi --config "$CHEZMOI_STATE/chezmoi.toml" apply --source "$REPO_DIR" --destination "$TEST_HOME" --force 2>&1 | grep -v "^$" | tail -5 || true
+chezmoi --config "$CHEZMOI_STATE/chezmoi.toml" apply --source "$REPO_DIR" --destination "$TEST_HOME" --force --exclude=scripts 2>&1 | grep -v "^$" | tail -5 || true
 
 # Copy host age identity so the test home can decrypt .age files
 if [ -f "$HOME/.config/chezmoi/key.txt" ] && [ -n "$AGE_PUBKEY" ]; then
