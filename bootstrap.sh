@@ -61,14 +61,14 @@ KEY_FILE="$HOME/.config/chezmoi/key.txt"
 
 if [ ! -f "$KEY_FILE" ]; then
     echo ""
-    echo -e "${YELLOW}[SETUP REQUIRED]${NC} No age key found at $KEY_FILE"
-    echo "  If you already have a key, place it there and re-run bootstrap."
-    echo "  If this is your primary machine, a new key will be generated."
+    echo -e "${YELLOW}[SETUP]${NC} No age key found at $KEY_FILE"
+    echo "  [G] Generate a new key (primary machine)"
+    echo "  [S] Skip encryption — unencrypted dotfiles only"
+    echo "  [Q] Quit — place your key, then re-run bootstrap"
     echo ""
-    read -r -p "Generate a new age key on this machine? [y/N] " REPLY
+    read -r -p "Choose [G/s/q] " REPLY
     case "$REPLY" in
-        [yY]|[yY][eE][sS])
-            # ── First machine: generate key in RAM, write once to disk ──
+        [gG])
             info "Generating age encryption key..."
             mkdir -p "$(dirname "$KEY_FILE")"
             AGE_OUT=$(chezmoi age-keygen)
@@ -80,6 +80,11 @@ if [ ! -f "$KEY_FILE" ]; then
             echo "  Back it up. Copy to other machines to unlock their dotfiles."
             echo ""
             ;;
+        [sS])
+            info "Skipping encryption — unencrypted dotfiles only."
+            info "Encrypted files will be ignored until you place a key and run 'config unlock'."
+            echo ""
+            ;;
         *)
             echo ""
             echo "Place your age key at $KEY_FILE, then re-run: ./bootstrap.sh"
@@ -87,7 +92,7 @@ if [ ! -f "$KEY_FILE" ]; then
             ;;
     esac
 fi
-if [ -z "${PUBKEY:-}" ]; then
+if [ -z "${PUBKEY:-}" ] && [ -f "$KEY_FILE" ]; then
     PUBKEY=$(chezmoi age-keygen -y "$KEY_FILE" 2>/dev/null)
 fi
 
@@ -107,7 +112,7 @@ chezmoi init --source "$REPO_DIR" --force
 # Replace placeholder with the real age public key
 # Done outside of chezmoi scripts to avoid config mutation during apply.
 CHEZMOI_TOML="$HOME/.config/chezmoi/chezmoi.toml"
-if [ -f "$CHEZMOI_TOML" ] && grep -q 'REPLACE_WITH_YOUR_AGE_PUBLIC_KEY' "$CHEZMOI_TOML" 2>/dev/null; then
+if [ -n "${PUBKEY:-}" ] && [ -f "$CHEZMOI_TOML" ] && grep -q 'REPLACE_WITH_YOUR_AGE_PUBLIC_KEY' "$CHEZMOI_TOML" 2>/dev/null; then
     if [ "$(uname -s)" = "Darwin" ]; then
         sed -i "" "s/REPLACE_WITH_YOUR_AGE_PUBLIC_KEY/$PUBKEY/" "$CHEZMOI_TOML"
     else
