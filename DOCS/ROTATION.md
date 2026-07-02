@@ -26,28 +26,15 @@ config update && config apply
 # 1. Generate new key
 chezmoi age-keygen --output ~/new-key.txt
 
-# 2. Update .chezmoi.toml.tmpl if you store the key at a non-standard location
-#    (default is ~/.config/chezmoi/key.txt — template uses {{ .chezmoi.homeDir }})
+# 2. Re-encrypt everything + update config (one command)
+config rotate-key ~/new-key.txt
 
-# 3. Re-encrypt all .age files
-cd $(chezmoi source-path)
-mkdir -p /tmp/secrets
-for f in private_dot_ssh/*.age; do
-  name=$(basename "$f" .age)
-  age -d -i ~/.config/chezmoi/key.txt "$f" > "/tmp/secrets/$name"
-done
-for f in /tmp/secrets/*; do
-  name=$(basename "$f")
-  age -r "age1YOUR_NEW_PUBKEY..." -o "private_dot_ssh/$name.age" "$f"
-done
-rm -rf /tmp/secrets
-
-# 4. Commit + push
+# 3. Commit
 config commit -m "rotate: age master key" && config git -- push
 
-# 5. Distribute new key to all machines
+# 4. Distribute new key to all machines
 scp ~/new-key.txt user@machine:~/.config/chezmoi/key.txt
-# Then on each: config update && config apply
+# Or delete ~/new-key.txt and distribute via password manager
 ```
 
 ## Purge old key from git history
