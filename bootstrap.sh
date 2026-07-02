@@ -72,12 +72,14 @@ if [ -f "$AGE_ENC" ]; then
         info "Age key decrypted to $KEY_FILE"
     fi
 else
-    # ── First machine: generate key, encrypt with passphrase ──
+    # ── First machine: generate key, extract pubkey in RAM, write once to disk ──
     info "Generating age encryption key..."
     mkdir -p "$(dirname "$KEY_FILE")"
-    chezmoi age-keygen --output "$KEY_FILE"
+    AGE_OUT=$(chezmoi age-keygen)
+    echo "$AGE_OUT" > "$KEY_FILE"
     chmod 600 "$KEY_FILE"
-    info "Age key generated: $KEY_FILE"
+    PUBKEY=$(echo "$AGE_OUT" | sed -n 's/# public key: *//p')
+    unset AGE_OUT
     echo ""
     echo -e "${YELLOW}Choose a passphrase to protect your age key.${NC}"
     echo -e "${YELLOW}You will need this passphrase on every new machine.${NC}"
@@ -85,7 +87,9 @@ else
     git -C "$REPO_DIR" add "$AGE_ENC" 2>/dev/null || true
     info "Encrypted key saved to $AGE_ENC — commit this to the repo."
 fi
-PUBKEY=$(chezmoi age-keygen -y "$KEY_FILE" 2>/dev/null)
+if [ -z "${PUBKEY:-}" ]; then
+    PUBKEY=$(chezmoi age-keygen -y "$KEY_FILE" 2>/dev/null)
+fi
 
 # 2. Check for existing dotfiles repo
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
