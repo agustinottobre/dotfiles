@@ -156,6 +156,12 @@ function config(){
     local f
     f=$(chezmoi managed 2>/dev/null | fzf --height 40% --layout=reverse) || return 1
     [[ -n "$f" ]] && chezmoi edit "$HOME/$f"
+  elif [[ "$1" == "lock" ]]; then
+    # Lock: remove deployed SSH keys + age identity
+    _config_lock
+  elif [[ "$1" == "unlock" ]]; then
+    # Unlock: temporarily place age key, apply, remove key
+    _config_unlock
   else
     # Passthrough to chezmoi
     if ! chezmoi source-path >/dev/null 2>&1; then
@@ -166,33 +172,31 @@ function config(){
   fi
 }
 
-# ── Lock / unlock: control SSH key deployment ──
+# ── config lock / unlock internals ──
 # Without the age identity file at ~/.config/chezmoi/key.txt, encrypted
-# .age files (SSH keys) are ignored — ~/.ssh/ stays empty. Place the key
-# temporarily to decrypt, then remove it to re-lock.
-dotfiles-unlock() {
+# .age files (SSH keys) are ignored via .chezmoiignore — ~/.ssh/ stays empty.
+# Place the key temporarily to decrypt, then remove it to re-lock.
+_config_unlock() {
     local src keyfile
-    src=$(chezmoi source-path 2>/dev/null) || { echo "dotfiles-unlock: chezmoi not configured" >&2; return 1; }
+    src=$(chezmoi source-path 2>/dev/null) || { echo "config unlock: chezmoi not configured" >&2; return 1; }
     keyfile="${DOTFILES_AGE_KEY:-${HOME}/.config/chezmoi/key.txt.backup}"
     if [[ ! -f "$keyfile" ]]; then
-        echo "dotfiles-unlock: age key not found at $keyfile" >&2
+        echo "config unlock: age key not found at $keyfile" >&2
         echo "  Set DOTFILES_AGE_KEY=/path/to/age-key.txt or place key at ~/.config/chezmoi/key.txt.backup" >&2
         return 1
     fi
     cp "$keyfile" ~/.config/chezmoi/key.txt
     chmod 600 ~/.config/chezmoi/key.txt
     config apply
-    # Only delete identity if there are encrypted files to decrypt
     if ls "$src"/private_dot_ssh/*.age >/dev/null 2>&1; then
-        echo "dotfiles-unlock: SSH keys deployed, identity removed from disk"
+        echo "config unlock: SSH keys deployed, identity removed from disk"
     fi
     rm -f ~/.config/chezmoi/key.txt
 }
 
-dotfiles-lock() {
+_config_lock() {
     local src
-    src=$(chezmoi source-path 2>/dev/null) || { echo "dotfiles-lock: chezmoi not configured" >&2; return 1; }
-    # Remove every deployed file that has a corresponding .age in the repo
+    src=$(chezmoi source-path 2>/dev/null) || { echo "config lock: chezmoi not configured" >&2; return 1; }
     local removed=0
     for agefile in "$src"/private_dot_ssh/*.age; do
         [[ -f "$agefile" ]] || continue
@@ -202,7 +206,7 @@ dotfiles-lock() {
         fi
     done
     rm -f ~/.config/chezmoi/key.txt
-    echo "dotfiles-lock: removed ${removed} SSH key(s), age identity deleted"
+    echo "config lock: removed ${removed} SSH key(s), age identity deleted"
 }
 
 # Wiki
