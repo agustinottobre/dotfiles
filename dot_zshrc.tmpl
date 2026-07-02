@@ -172,6 +172,16 @@ function config(){
   fi
 }
 
+# ── Secure removal helper ───────────────────────────────────────────────────
+# Uses shred (coreutils) when available, falls back to rm.
+_config_rm() {
+    if command -v shred >/dev/null 2>&1; then
+        shred -u "$1" 2>/dev/null || rm -f "$1"
+    else
+        rm -f "$1"
+    fi
+}
+
 # ── config lock / unlock internals ──
 # Without the age identity file at ~/.config/chezmoi/key.txt, encrypted
 # .age files are ignored via .chezmoiignore — deployed targets stay empty.
@@ -184,7 +194,7 @@ _config_unlock() {
         return 1
     fi
     config apply
-    rm -f ~/.config/chezmoi/key.txt
+    _config_rm ~/.config/chezmoi/key.txt
     echo "config unlock: encrypted files deployed, identity removed from disk"
 }
 
@@ -199,7 +209,7 @@ _config_lock() {
             rm -f "$HOME/$target" && ((removed++))
         fi
     done < <(chezmoi managed 2>/dev/null)
-    rm -f ~/.config/chezmoi/key.txt
+    _config_rm ~/.config/chezmoi/key.txt
     echo "config lock: removed ${removed} encrypted file(s), age identity deleted"
 }
 
