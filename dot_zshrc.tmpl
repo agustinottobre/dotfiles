@@ -166,6 +166,45 @@ function config(){
   fi
 }
 
+# ── Lock / unlock: control SSH key deployment ──
+# Without the age identity file at ~/.config/chezmoi/key.txt, encrypted
+# .age files (SSH keys) are ignored — ~/.ssh/ stays empty. Place the key
+# temporarily to decrypt, then remove it to re-lock.
+dotfiles-unlock() {
+    local src keyfile
+    src=$(chezmoi source-path 2>/dev/null) || { echo "dotfiles-unlock: chezmoi not configured" >&2; return 1; }
+    keyfile="${DOTFILES_AGE_KEY:-${HOME}/.config/chezmoi/key.txt.backup}"
+    if [[ ! -f "$keyfile" ]]; then
+        echo "dotfiles-unlock: age key not found at $keyfile" >&2
+        echo "  Set DOTFILES_AGE_KEY=/path/to/age-key.txt or place key at ~/.config/chezmoi/key.txt.backup" >&2
+        return 1
+    fi
+    cp "$keyfile" ~/.config/chezmoi/key.txt
+    chmod 600 ~/.config/chezmoi/key.txt
+    config apply
+    # Only delete identity if there are encrypted files to decrypt
+    if ls "$src"/private_dot_ssh/*.age >/dev/null 2>&1; then
+        echo "dotfiles-unlock: SSH keys deployed, identity removed from disk"
+    fi
+    rm -f ~/.config/chezmoi/key.txt
+}
+
+dotfiles-lock() {
+    local src
+    src=$(chezmoi source-path 2>/dev/null) || { echo "dotfiles-lock: chezmoi not configured" >&2; return 1; }
+    # Remove every deployed file that has a corresponding .age in the repo
+    local removed=0
+    for agefile in "$src"/private_dot_ssh/*.age; do
+        [[ -f "$agefile" ]] || continue
+        local plain="${HOME}/.ssh/$(basename "$agefile" .age)"
+        if [[ -f "$plain" ]]; then
+            rm -f "$plain" && ((removed++))
+        fi
+    done
+    rm -f ~/.config/chezmoi/key.txt
+    echo "dotfiles-lock: removed ${removed} SSH key(s), age identity deleted"
+}
+
 # Wiki
 function wiki-list-select(){
   local wiki=$HOME/wiki

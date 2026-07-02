@@ -21,3 +21,12 @@ DOTFILES_STRATEGY.md
 # Exclude macOS-only configs on non-macOS
 dot_config/skhd/skhdrc
 {{ end }}
+
+# ── Encrypted files: ignore when age identity is absent ──
+# Without the identity file, chezmoi can't decrypt .age files. Ignoring them
+# lets config apply work normally for all unencrypted files. Place the key
+# at ~/.config/chezmoi/key.txt and run 'config apply' to decrypt on-demand.
+{{- $hasKey := stat (joinPath .chezmoi.homeDir ".config" "chezmoi" "key.txt") }}
+{{- if not $hasKey }}
+private_dot_ssh/*.age
+{{- end }}
