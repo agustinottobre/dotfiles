@@ -59,41 +59,13 @@ fi
 # ── Age encryption key ─────────────────────────────────────────────────────
 KEY_FILE="$HOME/.config/chezmoi/key.txt"
 
-if [ ! -f "$KEY_FILE" ]; then
-    echo ""
-    echo -e "${YELLOW}[SETUP]${NC} No age key found at $KEY_FILE"
-    echo "  [G] Generate a new key (primary machine)"
-    echo "  [S] Skip encryption — unencrypted dotfiles only"
-    echo "  [Q] Quit — place your key, then re-run bootstrap"
-    echo ""
-    read -r -p "Choose [G/s/q] " REPLY
-    case "$REPLY" in
-        [gG])
-            info "Generating age encryption key..."
-            mkdir -p "$(dirname "$KEY_FILE")"
-            AGE_OUT=$(chezmoi age-keygen)
-            printf '%s\n' "$AGE_OUT" > "$KEY_FILE"
-            chmod 600 "$KEY_FILE"
-            PUBKEY=$(echo "$AGE_OUT" | sed -n 's/# public key: *//p')
-            unset AGE_OUT
-            echo -e "${YELLOW}[IMPORTANT]${NC} New age key at $KEY_FILE"
-            echo "  Back it up. Copy to other machines to unlock their dotfiles."
-            echo ""
-            ;;
-        [sS])
-            info "Skipping encryption — unencrypted dotfiles only."
-            info "Encrypted files will be ignored until you place a key and run 'config unlock'."
-            echo ""
-            ;;
-        *)
-            echo ""
-            echo "Place your age key at $KEY_FILE, then re-run: ./bootstrap.sh"
-            exit 1
-            ;;
-    esac
-fi
-if [ -z "${PUBKEY:-}" ] && [ -f "$KEY_FILE" ]; then
+if [ -f "$KEY_FILE" ]; then
     PUBKEY=$(chezmoi age-keygen -y "$KEY_FILE" 2>/dev/null)
+    info "Age key found — encryption enabled."
+else
+    info "No age key found — encrypted files will be ignored."
+    info "To set up encryption later, generate a key and run 'config unlock'."
+    echo ""
 fi
 
 # 2. Check for existing dotfiles repo
