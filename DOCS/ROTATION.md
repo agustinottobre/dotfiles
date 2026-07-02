@@ -26,15 +26,18 @@ config update && config apply
 # 1. Generate new key
 chezmoi age-keygen --output ~/new-key.txt
 
-# 2. Re-encrypt everything + update config (one command)
+# 2. Re-encrypt everything with new key
 config rotate-key ~/new-key.txt
+# → if locked, prompts for passphrase to recover old key
+# → decrypts all .age files with old key
+# → re-encrypts with new public key
+# → updates recipient in chezmoi.toml
+# New key IS NOT deleted — you need it for other machines.
 
 # 3. Commit
 config commit -m "rotate: age master key" && config git -- push
 
-# 4. Distribute new key to all machines
-scp ~/new-key.txt user@machine:~/.config/chezmoi/key.txt
-# Or delete ~/new-key.txt and distribute via password manager
+# 4. Distribute new key to other machines, then lock
 ```
 
 ## Purge old key from git history

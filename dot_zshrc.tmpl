@@ -232,24 +232,32 @@ _config_unlock() {
 # ── config rotate-key ───────────────────────────────────────────────────────
 # Re-encrypts all .age files with a new key and updates chezmoi.toml.
 # Usage: config rotate-key ~/new-age-key.txt
+# Requires the old key on disk. If locked, run 'config unlock' first.
 _config_rotate() {
     local new_key="$1"
     local old_key=~/.config/chezmoi/key.txt
-    local src dir
+    local old_protected=~/.config/chezmoi/key.txt.age
 
     if [[ $# -ne 1 || ! -f "$new_key" ]]; then
         echo "config rotate-key: path to new age key required" >&2
         echo "  Usage: config rotate-key ~/new-age-key.txt" >&2
         return 1
     fi
+
+    # Recover old key if locked (passphrase-protected)
+    if [[ ! -f "$old_key" ]] && [[ -f "$old_protected" ]]; then
+        echo "Old key is locked — enter passphrase:"
+        chezmoi age decrypt --passphrase --output "$old_key" "$old_protected" || return 1
+        chmod 600 "$old_key"
+    fi
     if [[ ! -f "$old_key" ]]; then
-        echo "config rotate-key: current key not found at $old_key" >&2
-        echo "  Place your current age key there first." >&2
+        echo "config rotate-key: current key not found" >&2
+        echo "  Place it at $old_key or run 'config unlock' first." >&2
         return 1
     fi
 
+    local src new_pubkey
     src=$(chezmoi source-path 2>/dev/null) || { echo "config rotate-key: chezmoi not configured" >&2; return 1; }
-    local new_pubkey
     new_pubkey=$(chezmoi age-keygen -y "$new_key" 2>/dev/null)
     [[ -n "$new_pubkey" ]] || { echo "config rotate-key: could not extract pubkey from $new_key" >&2; return 1; }
 
@@ -273,11 +281,11 @@ _config_rotate() {
         else
             sed -i "s|recipient.*=.*\"age1[^\"]*\"|recipient = \"$new_pubkey\"|" "$toml"
         fi
-        echo "config rotate-key: updated recipient in chezmoi.toml"
     fi
 
-    _config_rm "$new_key"
     echo "config rotate-key: re-encrypted ${rotated} file(s) with new key"
+    echo "  Keep your new key: $new_key"
+    echo "  Distribute it to other machines, then run 'config lock'."
 }
 
 # Wiki
