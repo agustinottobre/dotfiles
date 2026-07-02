@@ -433,6 +433,17 @@ fi
 # config passthrough: err on non-existent chezmoi subcommand
 zsh_exec 'config nonexistent_cmd 2>/dev/null; echo $?' | grep -q '1' && pass "config: errors on invalid chezmoi subcommand" || warn "config: errors on invalid chezmoi subcommand — may be chezmoi version difference"
 
+# ── config rotate-key ──
+header "config rotate-key"
+zsh_exec 'whence -f _config_rotate >/dev/null 2>&1 && echo OK' | grep -q OK && pass "config: rotate-key function defined" || fail "config: rotate-key function not defined"
+zsh_exec 'config rotate-key 2>/dev/null; echo $?' | grep -q '1' && pass "config: rotate-key without args returns error" || fail "config: rotate-key without args should error"
+zsh_exec 'config rotate-key /tmp/nonexistent_key_$$ 2>/dev/null; echo $?' | grep -q '1' && pass "config: rotate-key with missing file returns error" || fail "config: rotate-key with missing file should error"
+
+# ── config lock/unlock ──
+header "config lock/unlock"
+zsh_exec 'whence -f _config_lock >/dev/null 2>&1 && echo OK' | grep -q OK && pass "config: lock function defined" || fail "config: lock function not defined"
+zsh_exec 'whence -f _config_unlock >/dev/null 2>&1 && echo OK' | grep -q OK && pass "config: unlock function defined" || fail "config: unlock function not defined"
+
 # FZF availability check in config() (no-args path)
 check_grep ".zshrc" 'command -v fzf' "config: fzf availability check in .zshrc"
 

@@ -547,6 +547,36 @@ grep -q 'chezmoi source-path' "$TEST_HOME/.zshrc" && pass "config: source-path c
 # config passthrough: err on non-existent chezmoi subcommand
 zsh_test 'config nonexistent_cmd 2>/dev/null; echo $?' | grep -q '1' && pass "config: errors on invalid chezmoi subcommand (macOS)" || warn "config: errors on invalid chezmoi subcommand (macOS)"
 
+# ── config rotate-key ───────────────────────────────────────────────────────
+header "config rotate-key"
+
+# rotate-key function must be defined
+zsh_test 'whence -f _config_rotate >/dev/null 2>&1 && echo OK' | grep -q OK && pass "config: rotate-key function defined" || fail "config: rotate-key function not defined"
+
+# no-args: must return error
+zsh_test 'config rotate-key 2>/dev/null; echo $?' | grep -q '1' && pass "config: rotate-key without args returns error" || fail "config: rotate-key without args should error"
+
+# non-existent file: must return error  
+zsh_test 'config rotate-key /tmp/nonexistent_key_$$ 2>/dev/null; echo $?' | grep -q '1' && pass "config: rotate-key with missing file returns error" || fail "config: rotate-key with missing file should error"
+
+# Valid key: must parse pubkey and show output
+FAKE_ROTATE_KEY=$(mktemp /tmp/dotfiles-test-rotate-key-XXXXXX)
+chezmoi age-keygen --output "$FAKE_ROTATE_KEY" 2>/dev/null
+zsh_test "config rotate-key '$FAKE_ROTATE_KEY' 2>&1; echo EXIT:\$?" | grep -q 'EXIT:0' && pass "config: rotate-key with valid key processes files" || warn "config: rotate-key with valid key had issues (check key state)"
+rm -f "$FAKE_ROTATE_KEY"
+
+# ── config lock/unlock ──────────────────────────────────────────────────────
+header "config lock/unlock"
+
+# lock function must be defined
+zsh_test 'whence -f _config_lock >/dev/null 2>&1 && echo OK' | grep -q OK && pass "config: lock function defined" || fail "config: lock function not defined"
+
+# unlock function must be defined
+zsh_test 'whence -f _config_unlock >/dev/null 2>&1 && echo OK' | grep -q OK && pass "config: unlock function defined" || fail "config: unlock function not defined"
+
+# lock runs without error  
+zsh_test 'config lock 2>&1; echo EXIT:$?' | grep -q 'EXIT:0' && pass "config: lock runs successfully" || warn "config: lock returned non-zero"
+
 # ── wiki() function ───────────────────────────────────────────────────────────
 header "wiki() function"
 
