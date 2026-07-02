@@ -8,9 +8,6 @@ DOTFILES_STRATEGY.md
 /bootstrap.sh
 /macos_on_incus_potential_solution.txt
 
-# Encrypted age key (not a dotfile — managed manually by bootstrap.sh)
-/key.txt.age
-
 # Tests and docs (not deployed to home)
 /tests/
 /DOCS/

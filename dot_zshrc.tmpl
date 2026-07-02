@@ -175,19 +175,14 @@ function config(){
 # ── config lock / unlock internals ──
 # Without the age identity file at ~/.config/chezmoi/key.txt, encrypted
 # .age files are ignored via .chezmoiignore — deployed targets stay empty.
-# 'config unlock' prompts for the passphrase to decrypt key.txt.age from the
-# repo, applies, then removes the key. No cleartext key stored anywhere.
+# Place the key at ~/.config/chezmoi/key.txt (from primary machine) and run
+# 'config unlock' to deploy secrets temporarily.
 _config_unlock() {
-    local src age_enc
-    src=$(chezmoi source-path 2>/dev/null) || { echo "config unlock: chezmoi not configured" >&2; return 1; }
-    age_enc="$src/key.txt.age"
-    if [[ ! -f "$age_enc" ]]; then
-        echo "config unlock: key.txt.age not found in repo. Run bootstrap.sh first." >&2
+    if [[ ! -f ~/.config/chezmoi/key.txt ]]; then
+        echo "config unlock: age key not found at ~/.config/chezmoi/key.txt" >&2
+        echo "  Place your key there first (copy from primary machine or password manager)" >&2
         return 1
     fi
-    echo "Enter passphrase to unlock encrypted files:"
-    chezmoi age decrypt --passphrase --output ~/.config/chezmoi/key.txt "$age_enc" || return 1
-    chmod 600 ~/.config/chezmoi/key.txt
     config apply
     rm -f ~/.config/chezmoi/key.txt
     echo "config unlock: encrypted files deployed, identity removed from disk"

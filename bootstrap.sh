@@ -58,34 +58,34 @@ fi
 
 # ── Age encryption key ─────────────────────────────────────────────────────
 KEY_FILE="$HOME/.config/chezmoi/key.txt"
-AGE_ENC="$REPO_DIR/key.txt.age"
 
-if [ -f "$AGE_ENC" ]; then
-    # ── Not the first machine: decrypt the key with passphrase ──
-    info "Encrypted age key found in repo ($AGE_ENC)."
-    if [ ! -f "$KEY_FILE" ]; then
-        echo ""
-        echo -e "${YELLOW}Enter the passphrase to decrypt your age key:${NC}"
-        mkdir -p "$(dirname "$KEY_FILE")"
-        chezmoi age decrypt --passphrase --output "$KEY_FILE" "$AGE_ENC"
-        chmod 600 "$KEY_FILE"
-        info "Age key decrypted to $KEY_FILE"
-    fi
-else
-    # ── First machine: generate key, extract pubkey in RAM, write once to disk ──
-    info "Generating age encryption key..."
-    mkdir -p "$(dirname "$KEY_FILE")"
-    AGE_OUT=$(chezmoi age-keygen)
-    printf '%s\n' "$AGE_OUT" > "$KEY_FILE"
-    chmod 600 "$KEY_FILE"
-    PUBKEY=$(echo "$AGE_OUT" | sed -n 's/# public key: *//p')
-    unset AGE_OUT
+if [ ! -f "$KEY_FILE" ]; then
     echo ""
-    echo -e "${YELLOW}Choose a passphrase to protect your age key.${NC}"
-    echo -e "${YELLOW}You will need this passphrase on every new machine.${NC}"
-    chezmoi age encrypt --passphrase --output "$AGE_ENC" "$KEY_FILE"
-    git -C "$REPO_DIR" add "$AGE_ENC" 2>/dev/null || true
-    info "Encrypted key saved to $AGE_ENC — commit this to the repo."
+    echo -e "${YELLOW}[SETUP REQUIRED]${NC} No age key found at $KEY_FILE"
+    echo "  If you already have a key, place it there and re-run bootstrap."
+    echo "  If this is your primary machine, a new key will be generated."
+    echo ""
+    read -r -p "Generate a new age key on this machine? [y/N] " REPLY
+    case "$REPLY" in
+        [yY]|[yY][eE][sS])
+            # ── First machine: generate key in RAM, write once to disk ──
+            info "Generating age encryption key..."
+            mkdir -p "$(dirname "$KEY_FILE")"
+            AGE_OUT=$(chezmoi age-keygen)
+            printf '%s\n' "$AGE_OUT" > "$KEY_FILE"
+            chmod 600 "$KEY_FILE"
+            PUBKEY=$(echo "$AGE_OUT" | sed -n 's/# public key: *//p')
+            unset AGE_OUT
+            echo -e "${YELLOW}[IMPORTANT]${NC} New age key at $KEY_FILE"
+            echo "  Back it up. Copy to other machines to unlock their dotfiles."
+            echo ""
+            ;;
+        *)
+            echo ""
+            echo "Place your age key at $KEY_FILE, then re-run: ./bootstrap.sh"
+            exit 1
+            ;;
+    esac
 fi
 if [ -z "${PUBKEY:-}" ]; then
     PUBKEY=$(chezmoi age-keygen -y "$KEY_FILE" 2>/dev/null)
@@ -137,23 +137,11 @@ echo "  1. Restart your shell: exec zsh"
 echo "  2. Or source: source ~/.zshrc"
 echo "  3. For tmux: prefix + I to install plugins"
 echo ""
-if [ -f "$AGE_ENC" ] && ! git -C "$REPO_DIR" diff --cached --quiet "$AGE_ENC" 2>/dev/null; then
-    echo -e "${YELLOW}[IMPORTANT]${NC} Commit the encrypted age key to the repo:"
-    echo "  cd $REPO_DIR && git commit -m 'add encrypted age key' && git push"
-    echo "  # On other machines, bootstrap.sh will prompt for the passphrase."
-fi
-echo ""
 
 # ── Security reminder ──
 if [ -f "$KEY_FILE" ]; then
-    if [ -f "$AGE_ENC" ]; then
-        echo -e "${YELLOW}[SECURITY]${NC} Age key on disk at $KEY_FILE"
-        echo "  This machine can decrypt all your secrets."
-        echo "  If this is not your primary machine, lock it: config lock"
-    else
-        echo -e "${YELLOW}[SECURITY]${NC} Age key at $KEY_FILE — protect it"
-        echo "  Use a strong passphrase. This key decrypts everything."
-    fi
+    echo -e "${YELLOW}[SECURITY]${NC} Age key on disk at $KEY_FILE"
+    echo "  If this is not your primary machine, lock it: config lock"
     echo ""
 fi
 
