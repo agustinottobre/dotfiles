@@ -182,18 +182,12 @@ _config_rm() {
 }
 
 # ── config lock / unlock ────────────────────────────────────────────────────
-# config lock      → removes deployed secrets (SSH keys, encrypted configs)
-# config unlock    → passphrase (or manual key) → deploy secrets → shred key
-#
-# First time: place key.txt manually, run 'config unlock', optionally set
-# a passphrase. After that, just unlock/lock. With passphrase, key.txt.age
-# lives at ~/.config/chezmoi/ (local only, never in repo).
-# Without passphrase, you place key.txt manually on each unlock.
+# lock   → removes deployed secrets (key.txt.age stays for next unlock)
+# unlock → passphrase (or manual key) → deploy secrets → shred plaintext key
 
 _config_lock() {
-    local src target srcpath removed
-    src=$(chezmoi source-path 2>/dev/null) || { echo "config lock: chezmoi not configured" >&2; return 1; }
-    removed=0
+    local target srcpath removed=0
+    chezmoi source-path >/dev/null 2>&1 || { echo "config lock: chezmoi not configured" >&2; return 1; }
     while IFS= read -r target; do
         [[ -n "$target" ]] || continue
         srcpath=$(chezmoi source-path "$HOME/$target" 2>/dev/null) || continue
@@ -205,34 +199,33 @@ _config_lock() {
 }
 
 _config_unlock() {
-    local local_age=~/.config/chezmoi/key.txt.age
-    if [[ -f "$local_age" ]]; then
-        # Subsequent unlocks: decrypt with existing passphrase
+    local protected=~/.config/chezmoi/key.txt.age
+    local key=~/.config/chezmoi/key.txt
+
+    if [[ -f "$protected" ]]; then
         echo "Enter passphrase to unlock:"
-        chezmoi age decrypt --passphrase --output ~/.config/chezmoi/key.txt "$local_age" || return 1
-        chmod 600 ~/.config/chezmoi/key.txt
-    elif [[ -f ~/.config/chezmoi/key.txt ]]; then
-        # First unlock: key placed manually, optionally protect with passphrase
+        chezmoi age decrypt --passphrase --output "$key" "$protected" || return 1
+        chmod 600 "$key"
+    elif [[ -f "$key" ]]; then
         config apply
         echo ""
         echo "Choose a passphrase to protect your key locally (Enter to skip):"
-        if chezmoi age encrypt --passphrase --output "$local_age" ~/.config/chezmoi/key.txt 2>/dev/null; then
-            echo "  ✓ Key protected at $local_age"
+        if chezmoi age encrypt --passphrase --output "$protected" "$key" 2>/dev/null; then
+            echo "  ✓ Key protected at $protected"
         else
-            echo "  ⚠ Passphrase skipped — you'll need to place the key on each unlock"
+            echo "  ⚠ Passphrase skipped — place key manually on next unlock"
         fi
-        _config_rm ~/.config/chezmoi/key.txt
+        _config_rm "$key"
         echo "config unlock: secrets deployed"
         return 0
     else
         echo "config unlock: no key found" >&2
-        echo "  First time? Place your age key at ~/.config/chezmoi/key.txt" >&2
-        echo "  Then run 'config unlock' to deploy secrets and set a passphrase." >&2
+        echo "  Place your age key at $key, then re-run." >&2
         return 1
     fi
     config apply
-    _config_rm ~/.config/chezmoi/key.txt
-    echo "config unlock: secrets deployed from disk"
+    _config_rm "$key"
+    echo "config unlock: secrets deployed"
 }
 
 # Wiki
