@@ -95,7 +95,7 @@ fi
 
 # 4. Apply dotfiles
 info "Applying dotfiles..."
-chezmoi apply --force
+chezmoi apply --force --keep-going
 
 if [ "$OS" != "darwin" ]; then
   if [ -x /usr/bin/zsh ] && [ "$SHELL" != "/usr/bin/zsh" ]; then

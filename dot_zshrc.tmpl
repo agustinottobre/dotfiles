@@ -25,26 +25,18 @@ source ${ZIM_HOME}/init.zsh
 # Completions & FZF (must be sourced early)
 # =============================================================================
 
-# Source FZF keybindings
-# Homebrew (macOS): ~/.fzf.zsh — checked first, covers all Homebrew installs
-# Linux: various system paths checked as fallback
-# macOS non-Homebrew: Intel Mac Homebrew share dir, MacPorts, Apple Silicon Homebrew
+# FZF keybindings — ~/.fzf.zsh is the modern standard (fzf --zsh > ~/.fzf.zsh)
+# Falls back to common system paths for older fzf packages.
 if [[ -f ~/.fzf.zsh ]]; then
   source ~/.fzf.zsh
-{{- if eq .chezmoi.os "linux" }}
 elif [[ -f /usr/share/fzf/key-bindings.zsh ]]; then
   source /usr/share/fzf/key-bindings.zsh
 elif [[ -f /usr/share/doc/fzf/examples/key-bindings.zsh ]]; then
   source /usr/share/doc/fzf/examples/key-bindings.zsh
-{{- else }}
-# macOS non-Homebrew fallback paths (Intel Mac Homebrew, MacPorts, Apple Silicon Homebrew)
-elif [[ -f /usr/local/opt/fzf/share/fzf/key-bindings.zsh ]]; then
-  source /usr/local/opt/fzf/share/fzf/key-bindings.zsh
 elif [[ -f /opt/homebrew/share/fzf/key-bindings.zsh ]]; then
   source /opt/homebrew/share/fzf/key-bindings.zsh
-#elif [[ -f /opt/local/share/fzf/key-bindings.zsh ]]; then
-#  source /opt/local/share/fzf/key-bindings.zsh
-{{- end }}
+elif [[ -f /usr/local/opt/fzf/share/fzf/key-bindings.zsh ]]; then
+  source /usr/local/opt/fzf/share/fzf/key-bindings.zsh
 fi
 
 # Explicitly bind fzf keys (ensures they work if overridden elsewhere)
@@ -97,27 +89,14 @@ fi
 # General
 alias ll='ls -lha'
 
-# Editors
-{{- if eq .chezmoi.os "darwin" }}
-if [[ -x /usr/local/bin/nvim ]]; then
-    NVIM_PATH='/usr/local/bin/nvim'
-elif [[ -x /opt/homebrew/bin/nvim ]]; then
-    NVIM_PATH='/opt/homebrew/bin/nvim'
-elif [[ -x "$HOME/.local/bin/nvim" ]]; then
-    NVIM_PATH="$HOME/.local/bin/nvim"
-else
-    NVIM_PATH='nvim'  # fallback to PATH lookup
-fi
-{{- else }}
-if [[ -x "$HOME/.local/bin/nvim" ]]; then
-    NVIM_PATH="$HOME/.local/bin/nvim"
-else
-    NVIM_PATH='nvim'  # fallback to PATH lookup
-fi
+# Editors — nvim is in PATH via .zshenv
+{{- if eq .chezmoi.os "linux" }}
+# Linux: ~/.local/bin may not be in PATH yet at first boot; ensure it is
+[[ -x "$HOME/.local/bin/nvim" ]] && export PATH="$HOME/.local/bin:$PATH"
 {{- end }}
-alias vi=$NVIM_PATH
-alias vim=$NVIM_PATH
-alias vimdiff='$NVIM_PATH -d'
+alias vi=nvim
+alias vim=nvim
+alias vimdiff='nvim -d'
 
 # Utils
 alias calc='qalc'
@@ -207,8 +186,11 @@ _config_unlock() {
         echo "Enter passphrase to unlock:"
         chezmoi age decrypt --passphrase --output "$key" "$protected" || return 1
         chmod 600 "$key"
+        chezmoi apply --force --keep-going
+        _config_rm "$key"
+        echo "config unlock: secrets deployed"
     elif [[ -f "$key" ]]; then
-        config apply
+        chezmoi apply --force --keep-going
         echo ""
         echo "Choose a passphrase to protect your key locally (Enter to skip):"
         if chezmoi age encrypt --passphrase --output "$protected" "$key" 2>/dev/null; then
@@ -218,15 +200,11 @@ _config_unlock() {
         fi
         _config_rm "$key"
         echo "config unlock: secrets deployed"
-        return 0
     else
         echo "config unlock: no key found" >&2
         echo "  Place your age key at $key, then re-run." >&2
         return 1
     fi
-    config apply
-    _config_rm "$key"
-    echo "config unlock: secrets deployed"
 }
 
 # ── config rotate-key ───────────────────────────────────────────────────────

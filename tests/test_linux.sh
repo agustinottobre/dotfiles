@@ -54,11 +54,9 @@ cp -a "$REPO_DIR" "$TARGET_HOME/dotfiles"
 header "Running bootstrap.sh"
 # Install chezmoi + init, but skip package install (apt is slow in CI/VMs)
 # The run_onchange script is excluded — we only need dotfiles deployed
-HOME="$TARGET_HOME" bash -c "
-  command -v chezmoi >/dev/null 2>&1 || curl -sSL https://get.chezmoi.io | sh -s -- -b /usr/local/bin
-  chezmoi init --source '$TARGET_HOME/dotfiles' --force 2>/dev/null
-  chezmoi apply --source '$TARGET_HOME/dotfiles' --force --exclude=scripts 2>/dev/null
-" 2>&1 | tail -3
+command -v chezmoi >/dev/null 2>&1 || curl -sSL https://get.chezmoi.io | sh -s -- -b /usr/local/bin 2>/dev/null
+HOME="$TARGET_HOME" chezmoi init --source "$TARGET_HOME/dotfiles" --force 2>/dev/null || true
+HOME="$TARGET_HOME" chezmoi apply --source "$TARGET_HOME/dotfiles" --force --exclude=scripts --keep-going 2>/dev/null || true
 # Verify dotfiles were deployed (check key files exist)
 [[ -f "$TARGET_HOME/.zshrc" ]] && [[ -f "$TARGET_HOME/.zshenv" ]] && pass "dotfiles deployed" || fail "dotfiles deployment failed"
 
@@ -177,8 +175,9 @@ header "Shell aliases"
 check_zsh_alias 'll'  'ls -lha'  'll → ls -lha'
 check_zsh_alias 'vi'  'nvim'     'vi → nvim'
 check_zsh_alias 'vim' 'nvim'     'vim → nvim'
-# On Linux, NVIM_PATH should point to ~/.local/bin/nvim (bootstrap install location)
-check_grep ".zshrc" '.local/bin/nvim' 'NVIM_PATH=~/.local/bin/nvim (Linux)'
+# nvim alias uses plain 'nvim'; Linux PATH guard ensures ~/.local/bin is in PATH
+check_grep ".zshrc" 'alias vi=nvim' 'nvim alias: vi→nvim'
+check_grep ".zshrc" '.local/bin/nvim' 'Linux: ~/.local/bin PATH guard for nvim'
 check_zsh_alias 'calc' 'qalc'    'calc → qalc'
 check_zsh_alias 'glog' 'git log' 'glog → git log'
 check_zsh_alias 'gittree' 'git log' 'gittree → git log'
@@ -345,8 +344,8 @@ fi
 # ── Age Encryption Roundtrip ─────────────────────────────────────────────────
 header "Age encryption roundtrip"
 if command -v age >/dev/null 2>&1; then
-    # Use the HOST age key (test home doesn't have its own)
-    AGE_KEY="$HOME/.config/chezmoi/key.txt"
+    # Use the test-home age key (generated during deploy phase above)
+    AGE_KEY="$TEST_HOME/.config/chezmoi/key.txt"
     AGE_PUBKEY=$(chezmoi age-keygen -y "$AGE_KEY" 2>/dev/null || true)
     if [[ -n "$AGE_PUBKEY" ]]; then
         pass "age: key pair found"
@@ -355,7 +354,7 @@ if command -v age >/dev/null 2>&1; then
     fi
 
     # Verify recipient is NOT the placeholder
-    AGE_TOML="$HOME/.config/chezmoi/chezmoi.toml"
+    AGE_TOML="$TEST_HOME/.config/chezmoi/chezmoi.toml"
     if [[ -f "$AGE_TOML" ]] && grep -q 'REPLACE_WITH_YOUR_AGE_PUBLIC_KEY' "$AGE_TOML" 2>/dev/null; then
         fail "age: recipient still has placeholder in chezmoi.toml"
     else

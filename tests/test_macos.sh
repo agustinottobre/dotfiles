@@ -295,8 +295,8 @@ zsh_test 'alias vi 2>/dev/null | grep -q nvim' 2>/dev/null \
     && pass 'vi → nvim' || fail 'vi alias missing'
 zsh_test 'alias vim 2>/dev/null | grep -q nvim' 2>/dev/null \
     && pass 'vim → nvim' || fail 'vim alias missing'
-# On macOS, NVIM_PATH should point to /usr/local/bin/nvim (Homebrew install location)
-check_grep ".zshrc" '/usr/local/bin/nvim' 'NVIM_PATH=/usr/local/bin/nvim (macOS)'
+# nvim alias uses plain 'nvim' (PATH set in .zshenv)
+check_grep ".zshrc" "alias vi=nvim" 'nvim alias: vi→nvim'
 zsh_test 'alias calc 2>/dev/null | grep -q qalc' 2>/dev/null \
     && pass 'calc → qalc' || fail 'calc alias missing'
 

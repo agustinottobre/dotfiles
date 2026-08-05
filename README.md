@@ -109,7 +109,7 @@ Automatic via chezmoi templates. No manual symlinks or conditionals in shell.
 | Feature | macOS | Linux |
 |---------|-------|-------|
 | FZF backend | `fd` | `fdfind` |
-| nvim install | `/usr/local/bin/nvim` | `~/.local/bin/nvim` |
+| nvim install | `~/.local/bin/nvim` | `~/.local/bin/nvim` |
 | Docker | `docker-machine` aliases | — |
 | Kubernetes | k3d, kubeconfigRefresh | — |
 | Dart/Flutter | pub-cache bin | — |
