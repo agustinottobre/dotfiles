@@ -121,6 +121,22 @@ if [ ! -d "{{ .chezmoi.homeDir }}/.tmux/plugins/tpm" ]; then
         || { echo "  ✗ FAILED: TPM install" >&2; FAILED=$((FAILED+1)); }
 fi
 
+# ── FZF shell integration (SHARED) ──
+# Generate ~/.fzf.zsh so keybindings work. With fzf >= 0.48 use --zsh;
+# for older versions download shell files from the fzf repo.
+FZF_ZSH="{{ .chezmoi.homeDir }}/.fzf.zsh"
+if [ ! -f "$FZF_ZSH" ] && command -v fzf >/dev/null 2>&1; then
+    echo "Installing FZF shell integration..."
+    if fzf --zsh > "$FZF_ZSH" 2>/dev/null; then
+        echo "  ✓ FZF keybindings generated (--zsh)"
+    else
+        curl -fsSL https://raw.githubusercontent.com/junegunn/fzf/master/shell/key-bindings.zsh -o "$FZF_ZSH" 2>/dev/null \
+            && curl -fsSL https://raw.githubusercontent.com/junegunn/fzf/master/shell/completion.zsh -o "{{ .chezmoi.homeDir }}/.fzf_completion.zsh" 2>/dev/null \
+            && echo "  ✓ FZF keybindings downloaded (fallback)" \
+            || { echo "  ⚠ WARNING: FZF keybindings not installed" >&2; rm -f "$FZF_ZSH"; }
+    fi
+fi
+
 # ── Chezmoi zsh completions (SHARED, path differs per OS) ──
 {{ if eq .chezmoi.os "linux" }}
 COMP_DIR="/usr/local/share/zsh/site-functions"
